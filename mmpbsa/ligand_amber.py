@@ -228,7 +228,7 @@ def tleap_text(
         f"set default PBRadii {profile['amber_prep'].get('pb_radii', 'mbondi2')}",
     ]
     for lib in [*(cofactor_libs or []), *ligand_libs]:
-        lines.append(f'loadoff "{lib}"')
+        lines.append(tleap_parameter_load_command(lib))
     for frcmod in cofactor_frcmods or []:
         lines.append(f'loadamberparams "{frcmod}"')
     if ligand_frcmod is not None:
@@ -271,6 +271,15 @@ def read_manifest(paths: Any) -> dict[str, Any]:
     import json
 
     return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
+def tleap_parameter_load_command(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in {".lib", ".off"}:
+        return f'loadoff "{path}"'
+    if suffix in {".prep", ".prepi"}:
+        return f'loadamberprep "{path}"'
+    raise SystemExit(f"Unsupported Amber parameter library format {suffix!r}: {path}")
 
 
 def apply_radii(prmtop: Path, log: Path, profile: dict[str, Any]) -> None:

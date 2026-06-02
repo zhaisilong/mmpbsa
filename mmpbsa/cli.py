@@ -138,6 +138,11 @@ def status(run_dir: Path, job_id: str | None) -> None:
     for directory in job_dirs:
         if not directory.exists():
             raise click.ClickException(f"Job directory does not exist: {directory}")
+        config_path = directory / f"{directory.name}.json"
+        if not config_path.exists():
+            if job_id:
+                raise click.ClickException(f"Missing job config: {config_path}")
+            continue
         done = sorted(path.name for path in directory.glob(".*_done"))
         failed = sorted(path.name for path in directory.glob(".*_failed"))
         result = directory / "result" / "summary.json"

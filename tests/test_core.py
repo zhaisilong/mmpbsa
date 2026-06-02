@@ -11,6 +11,9 @@ from mmpbsa.common import frame_settings, gmx_runtime, load_profile
 from mmpbsa.ligand import ligand_input_format, mol2_total_charge, run_ligand_prepare
 from mmpbsa.ligand_amber import tleap_text
 from mmpbsa.ligand_pipeline import infer_dielectric_policy, ligand_replica_ante_mmpbsa_command, mmpbsa_input_text, select_interface_waters
+from mmpbsa.md import align_gro_to_top_molecule_order
+from mmpbsa.peptide_amber import prepare_input_structure as peptide_prepare_input_structure
+from mmpbsa.peptide_amber import tleap_text_with_cofactors as peptide_tleap_text_with_cofactors
 from mmpbsa.peptide_pipeline import mmpbsa_input_text as peptide_mmpbsa_input_text
 from mmpbsa.peptide_pipeline import peptide_dielectric_policy
 from mmpbsa.runner import DoneFileRunner, JobContext, discover_job_contexts
@@ -103,6 +106,22 @@ class CoreTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 discover_job_contexts(root, ROOT / "configs" / "smoke_20ps.yaml")
 
+    @unittest.skipUnless(CLICK_AVAILABLE, "click is not installed")
+    def test_status_skips_non_job_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_job(root, "alpha")
+            (root / "gdp_params").mkdir()
+
+            result = CliRunner().invoke(cli, ["status", str(root)])
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("alpha: incomplete", result.output)
+            self.assertNotIn("gdp_params", result.output)
+
+            result = CliRunner().invoke(cli, ["status", str(root), "--job-id", "gdp_params"])
+            self.assertNotEqual(result.exit_code, 0)
+            self.assertIn("Missing job config", result.output)
+
     def test_done_policy_default_resume_and_force(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -125,6 +144,69 @@ class CoreTests(unittest.TestCase):
             job_dir = make_job(root, "alpha")
             with self.assertRaises(SystemExit):
                 FakeRunner(make_context(job_dir)).run(mode="md")
+
+    def test_align_gro_to_top_molecule_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            top = root / "system_GMX.top"
+            gro = root / "system_GMX.gro"
+            top.write_text(
+                """
+[ moleculetype ]
+system 3
+[ atoms ]
+1 C 1 SYS C1 1 0 12.0
+
+[ moleculetype ]
+WAT 3
+[ atoms ]
+1 OW 1 WAT OW 1 0 16.0
+2 HW 1 WAT HW1 1 0 1.0
+3 HW 1 WAT HW2 1 0 1.0
+
+[ moleculetype ]
+NA+ 1
+[ atoms ]
+1 Na 1 NA+ NA 1 1 23.0
+
+[ moleculetype ]
+CL- 1
+[ atoms ]
+1 Cl 1 CL- CL 1 -1 35.0
+
+[ molecules ]
+system 1
+WAT 1
+NA+ 1
+CL- 1
+""",
+                encoding="utf-8",
+            )
+
+            def gro_atom(resid: int, resname: str, atom: str, serial: int) -> str:
+                return f"{resid:5d}{resname:<5s}{atom:>5s}{serial:5d}{0.0:8.3f}{0.0:8.3f}{0.0:8.3f}"
+
+            gro.write_text(
+                "\n".join(
+                    [
+                        "test",
+                        "6",
+                        gro_atom(1, "SYS", "C1", 1),
+                        gro_atom(4, "CL-", "CL", 2),
+                        gro_atom(2, "WAT", "OW", 3),
+                        gro_atom(2, "WAT", "HW1", 4),
+                        gro_atom(2, "WAT", "HW2", 5),
+                        gro_atom(3, "NA+", "NA", 6),
+                        "1.0 1.0 1.0",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            align_gro_to_top_molecule_order(gro, top)
+            atom_lines = gro.read_text(encoding="utf-8").splitlines()[2:8]
+            self.assertEqual([line[5:10].strip() for line in atom_lines], ["SYS", "WAT", "WAT", "WAT", "NA+", "CL-"])
+            self.assertEqual([int(line[15:20]) for line in atom_lines], [1, 2, 3, 4, 5, 6])
 
     def test_frame_settings_default_protocol(self) -> None:
         settings = frame_settings(load_profile(ROOT / "configs" / "default_15ns.yaml"))
@@ -195,6 +277,21 @@ class CoreTests(unittest.TestCase):
         self.assertIn('loadamberparams "ligand.frcmod"', text)
         self.assertIn("mol = combine { rec lig }", text)
         self.assertIn("addIonsRand mol Na+ 12", text)
+        text = tleap_text(
+            Path("rec.pdb"),
+            Path("ligand.mol2"),
+            Path("ligand.frcmod"),
+            [],
+            12,
+            profile,
+            cofactor_files=[Path("GDP.pdb")],
+            cofactor_frcmods=[Path("frcmod.phos")],
+            cofactor_libs=[Path("GDP.prep")],
+        )
+        self.assertIn('loadamberprep "GDP.prep"', text)
+        self.assertIn('loadamberparams "frcmod.phos"', text)
+        self.assertIn('cof1 = loadpdb "GDP.pdb"', text)
+        self.assertIn("mol = combine { rec cof1 lig }", text)
 
     def test_resp_auto_ligand_prepare_fails_fast(self) -> None:
         profile = load_profile(ROOT / "configs" / "ligand_crystal_3x5ns.yaml")
@@ -317,6 +414,54 @@ class CoreTests(unittest.TestCase):
         text = peptide_mmpbsa_input_text(manifest, configured, sanity=False)
         self.assertIn("entropy=1", text)
         self.assertIn("&nmode", text)
+
+    def test_peptide_receptor_cofactor_masks_and_tleap(self) -> None:
+        profile = load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_dir = root / "input"
+            input_dir.mkdir()
+            selected = input_dir / "selected.pdb"
+            selected.write_text(
+                "\n".join(
+                    [
+                        "ATOM      1  N   GLY A   1       0.000   0.000   0.000  1.00  0.00           N",
+                        "ATOM      2  CA  GLY A   1       1.000   0.000   0.000  1.00  0.00           C",
+                        "ATOM      3  N   ALA B   2       3.000   0.000   0.000  1.00  0.00           N",
+                        "ATOM      4  CA  ALA B   2       4.000   0.000   0.000  1.00  0.00           C",
+                        "END",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            paths = type("Paths", (), {"input": input_dir})()
+            manifest = {
+                "receptor_chains": "A",
+                "peptide_chains": "B",
+                "receptor_cofactor_residue_count": 1,
+            }
+            prepared = peptide_prepare_input_structure(paths, manifest, profile)
+            self.assertEqual(prepared["protein_receptor_residue_count"], 1)
+            self.assertEqual(prepared["receptor_residue_count"], 2)
+            self.assertEqual(prepared["peptide_residue_mask"], ":3-3")
+            self.assertTrue((input_dir / "selected_receptor.pdb").exists())
+            self.assertTrue((input_dir / "selected_peptide.pdb").exists())
+
+        text = peptide_tleap_text_with_cofactors(
+            Path("rec.pdb"),
+            Path("pep.pdb"),
+            2,
+            profile,
+            cofactor_files=[Path("GDP.pdb")],
+            cofactor_frcmods=[Path("frcmod.phos")],
+            cofactor_libs=[Path("GDP.prep")],
+        )
+        self.assertIn('loadamberprep "GDP.prep"', text)
+        self.assertIn('loadamberparams "frcmod.phos"', text)
+        self.assertIn('cof1 = loadpdb "GDP.pdb"', text)
+        self.assertIn("mol = combine { rec cof1 pep }", text)
+        self.assertIn("addIonsRand mol Na+ 2", text)
 
     def test_cli_help(self) -> None:
         if not CLICK_AVAILABLE:

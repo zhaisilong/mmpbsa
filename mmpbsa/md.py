@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import shutil
+from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 from .common import bash_gmx_command, mamba_command, replica_count, replica_names, run_logged, write_text_atomic
@@ -27,6 +29,7 @@ def convert_to_gromacs(paths: Any, profile: dict[str, Any]) -> None:
     acpype_dir = paths.gromacs / "system.amb2gmx"
     if not acpype_dir.exists():
         raise RuntimeError(f"ACPYPE did not create {acpype_dir}")
+    align_gro_to_top_molecule_order(acpype_dir / "system_GMX.gro", acpype_dir / "system_GMX.top")
     for idx, replica in enumerate(replica_names(profile), start=1):
         rep = paths.md / replica
         rep.mkdir(parents=True, exist_ok=True)
@@ -35,6 +38,115 @@ def convert_to_gromacs(paths: Any, profile: dict[str, Any]) -> None:
                 shutil.copy2(source, rep / source.name)
         for name, text in mdp_texts(profile, replica_index=idx).items():
             write_text_atomic(rep / name, text)
+
+
+def align_gro_to_top_molecule_order(gro_path: Path, top_path: Path) -> None:
+    """Keep ACPYPE .gro atom order consistent with GROMACS [ molecules ]."""
+    molecule_order = parse_top_molecules(top_path)
+    atom_counts = parse_molecule_atom_counts(top_path)
+    system_name = normalize_molecule_name("system")
+    if not molecule_order or system_name not in atom_counts:
+        return
+
+    gro_lines = gro_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    if len(gro_lines) < 3:
+        return
+    atom_total = int(gro_lines[1].strip())
+    atom_lines = gro_lines[2 : 2 + atom_total]
+    box_lines = gro_lines[2 + atom_total :]
+    system_atoms = atom_counts[system_name] * molecule_order.get(system_name, 0)
+    if system_atoms <= 0 or system_atoms >= len(atom_lines):
+        return
+
+    prefix = atom_lines[:system_atoms]
+    molecule_blocks: dict[str, list[list[str]]] = defaultdict(list)
+    index = system_atoms
+    while index < len(atom_lines):
+        line = atom_lines[index]
+        molecule_name = normalize_molecule_name(line[5:10].strip())
+        atom_count = atom_counts.get(molecule_name)
+        if atom_count is None or atom_count <= 0:
+            return
+        block = atom_lines[index : index + atom_count]
+        if len(block) != atom_count:
+            return
+        molecule_blocks[molecule_name].append(block)
+        index += atom_count
+
+    ordered = list(prefix)
+    changed = False
+    for molecule_name, molecule_count in molecule_order.items():
+        if molecule_name == system_name:
+            continue
+        blocks = molecule_blocks.get(molecule_name, [])
+        if len(blocks) != molecule_count:
+            return
+        for block in blocks:
+            ordered.extend(block)
+    if len(ordered) != len(atom_lines):
+        return
+    changed = ordered != atom_lines
+    if not changed:
+        return
+
+    renumbered = [renumber_gro_atom(line, serial) for serial, line in enumerate(ordered, start=1)]
+    write_text_atomic(gro_path, "\n".join([gro_lines[0], gro_lines[1], *renumbered, *box_lines]) + "\n")
+
+
+def parse_top_molecules(top_path: Path) -> dict[str, int]:
+    molecules: dict[str, int] = {}
+    in_molecules = False
+    for line in top_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_molecules = stripped == "[ molecules ]"
+            continue
+        if not in_molecules or not stripped or stripped.startswith(";"):
+            continue
+        parts = stripped.split()
+        if len(parts) >= 2 and parts[1].isdigit():
+            molecules[normalize_molecule_name(parts[0])] = int(parts[1])
+    return molecules
+
+
+def parse_molecule_atom_counts(top_path: Path) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    current_molecule: str | None = None
+    section = ""
+    atom_count = 0
+    expect_molecule_name = False
+    for line in top_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if current_molecule and section == "atoms":
+                counts[current_molecule] = atom_count
+            section = stripped.strip("[] ").strip()
+            atom_count = 0
+            expect_molecule_name = section == "moleculetype"
+            continue
+        if not stripped or stripped.startswith(";"):
+            continue
+        if expect_molecule_name:
+            current_molecule = normalize_molecule_name(stripped.split()[0])
+            expect_molecule_name = False
+            continue
+        if current_molecule and section == "atoms":
+            parts = stripped.split()
+            if parts and parts[0].isdigit():
+                atom_count += 1
+    if current_molecule and section == "atoms":
+        counts[current_molecule] = atom_count
+    return counts
+
+
+def normalize_molecule_name(name: str) -> str:
+    return name.strip().upper()
+
+
+def renumber_gro_atom(line: str, serial: int) -> str:
+    if len(line) < 20:
+        return line
+    return f"{line[:15]}{serial % 100000:5d}{line[20:]}"
 
 
 def run_em(paths: Any, profile: dict[str, Any]) -> None:

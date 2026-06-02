@@ -66,6 +66,21 @@ Protein-peptide job:
 }
 ```
 
+Peptide jobs can keep receptor cofactors such as GDP in the receptor state:
+
+```json
+{
+  "job_id": "kras_gdp_peptide",
+  "selected_pdb": "input/complex.pdb",
+  "receptor_chains": "A",
+  "peptide_chains": "B",
+  "receptor_cofactor_files": "input/gdp.pdb",
+  "receptor_cofactor_libs": "input/GDP.prep",
+  "receptor_cofactor_frcmods": "input/frcmod.phos",
+  "receptor_cofactor_residue_count": 1
+}
+```
+
 Protein-small-molecule job:
 
 ```json
@@ -77,7 +92,11 @@ Protein-small-molecule job:
   "ligand_file": "input/ligand.sdf",
   "ligand_resname": "LIG",
   "ligand_charge": 0,
-  "ligand_param_mode": "auto"
+  "ligand_param_mode": "auto",
+  "receptor_cofactor_files": "input/gdp.pdb",
+  "receptor_cofactor_libs": "input/GDP.prep",
+  "receptor_cofactor_frcmods": "input/frcmod.phos",
+  "receptor_cofactor_residue_count": 1
 }
 ```
 
@@ -164,5 +183,6 @@ result/summary.csv
 ## Documentation
 
 - [Setup guide](docs/setups.md)
+- [Receptor cofactor guide](docs/receptor_cofactors.md)
 - [Implementation plan](docs/PLAN.md)
 - [Peptide local validation notes](docs/peptide_3x5ns_mmpbsa.md)

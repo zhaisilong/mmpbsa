@@ -37,6 +37,7 @@ from .common import (
     run_logged,
     shlex_quote,
     split_chain_spec,
+    split_path_list,
     utc_now,
     write_csv_atomic,
     write_index,
@@ -211,6 +212,11 @@ class PeptidePipeline(DoneFileRunner):
         if not source_pdb.exists():
             raise SystemExit(f"Missing selected PDB: {source_pdb}")
         shutil.copy2(source_pdb, self.paths.input / "selected.pdb")
+        cofactor_files = self.copy_optional_inputs(row.get("receptor_cofactor_files"), "cofactors")
+        cofactor_frcmods = self.copy_optional_inputs(row.get("receptor_cofactor_frcmods"), "cofactor_params")
+        cofactor_libs = self.copy_optional_inputs(row.get("receptor_cofactor_libs"), "cofactor_params")
+        cofactor_count_text = str(row.get("receptor_cofactor_count") or row.get("receptor_cofactor_residue_count") or "").strip()
+        receptor_cofactor_count = len(cofactor_files) if cofactor_count_text == "" else int(cofactor_count_text)
         settings = frame_settings(self.profile)
         receptor_chains = row["receptor_chains"]
         ligand_chains = peptide_chains(row)
@@ -228,6 +234,10 @@ class PeptidePipeline(DoneFileRunner):
             "input_pdb": str(self.paths.input / "selected.pdb"),
             "receptor_chains": receptor_chains,
             "peptide_chains": ligand_chains,
+            "receptor_cofactor_files": cofactor_files,
+            "receptor_cofactor_frcmods": cofactor_frcmods,
+            "receptor_cofactor_libs": cofactor_libs,
+            "receptor_cofactor_residue_count": receptor_cofactor_count,
             "experimental_deltaG_kJ_mol": optional_float(row.get("deltaG_exp_kJ_mol")),
             "paper_mm_pbsa_kJ_mol": optional_float(row.get("paper_mm_pbsa_kJ_mol")),
             "paper_dmm_pbsa_kJ_mol": optional_float(row.get("paper_dmm_pbsa_kJ_mol")),
@@ -241,6 +251,22 @@ class PeptidePipeline(DoneFileRunner):
             },
         }
         self.write_manifest(manifest)
+
+    def copy_optional_inputs(self, value: str | None, dirname: str) -> list[str]:
+        copied: list[str] = []
+        items = split_path_list(value)
+        if not items:
+            return copied
+        target_dir = self.paths.input / dirname
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for idx, item in enumerate(items, start=1):
+            source = self.context.resolve_path(item)
+            if not source.exists():
+                raise SystemExit(f"Missing optional input {item!r}: {source}")
+            target = target_dir / f"{idx:02d}_{source.name}"
+            shutil.copy2(source, target)
+            copied.append(str(target))
+        return copied
 
     def step_prepare_input(self) -> None:
         manifest = prepare_input_structure(self.paths, self.manifest(), self.profile)
