@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Runtime outputs inside job directories
+*/input/
+*/ligand/
+*/amber/
+*/md/
+*/analysis/
+*/logs/
+*/result/
+*/.*_done
+*/.*_failed
+*/manifest.json
+
+# Aggregate outputs
+results/
+
+# Downloaded benchmark datasets
+resources/
+
+# Local pipeline migration/smoke tests
+pipeline_tests/
+
+# Local generated reports
+docs/tyk2_ligand_benchmark.md
