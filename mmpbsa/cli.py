@@ -16,10 +16,10 @@ from .benchmark import (
     run_ligand_jobs,
     write_benchmark_report,
 )
-from .common import DEFAULT_LIGAND_BENCHMARK_PROFILE, DEFAULT_LIGAND_PROFILE, DEFAULT_PROFILE, frame_settings, load_profile, mpi_pythonpath
+from .common import DEFAULT_LIGAND_BENCHMARK_PROFILE, DEFAULT_LIGAND_PROFILE, DEFAULT_PROFILE, frame_settings, gmx_runtime, load_profile, mpi_pythonpath, shlex_quote
 from .ligand_pipeline import LigandPipeline
 from .peptide_pipeline import PeptidePipeline
-from .runner import DoneFileRunner, discover_job_contexts
+from .runner import DoneFileRunner, apply_env_overrides, discover_job_contexts
 
 
 def protocol_option(function=None, *, default: Path = DEFAULT_PROFILE):
@@ -215,8 +215,9 @@ def frame_settings_cmd(protocol_path: Path) -> None:
 @cli.command()
 @protocol_option
 def doctor(protocol_path: Path) -> None:
-    profile = load_profile(protocol_path)
+    profile = apply_env_overrides(load_profile(protocol_path))
     env = str(profile["runtime"]["mamba_env"])
+    gmxrc, gmx_bin = gmx_runtime(profile)
     checks = [
         ["mamba", "run", "-n", env, "which", "MMPBSA.py"],
         ["mamba", "run", "-n", env, "which", "MMPBSA.py.MPI"],
@@ -225,7 +226,7 @@ def doctor(protocol_path: Path) -> None:
         ["mamba", "run", "-n", env, "which", "antechamber"],
         ["mamba", "run", "-n", env, "which", "parmchk2"],
         ["mamba", "run", "-n", env, "which", "parmed"],
-        ["bash", "-lc", f"source {profile['runtime']['gmxrc']} && which {profile['runtime']['gmx_bin']}"],
+        ["bash", "-lc", f"source {shlex_quote(gmxrc)} && which {shlex_quote(gmx_bin)}"],
     ]
     if bool(profile["mmpbsa"]["mpi"]):
         checks[2:2] = [

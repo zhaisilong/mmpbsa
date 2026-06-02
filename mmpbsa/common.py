@@ -25,6 +25,7 @@ DEFAULT_PROFILE = ROOT / "configs" / "default_15ns.yaml"
 DEFAULT_LIGAND_PROFILE = ROOT / "configs" / "ligand_crystal_3x5ns.yaml"
 DEFAULT_LIGAND_BENCHMARK_PROFILE = ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml"
 WATER_NAMES = {"HOH", "WAT", "H2O", "TIP3", "SOL"}
+ENV_VAR_PATTERN = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
 
 
 def utc_now() -> str:
@@ -114,6 +115,25 @@ def load_profile(path: Path = DEFAULT_PROFILE) -> dict[str, Any]:
     if missing:
         raise SystemExit(f"Missing profile keys in {path}: {', '.join(missing)}")
     return profile
+
+
+def expand_runtime_env(value: Any, label: str) -> str:
+    expanded = os.path.expanduser(os.path.expandvars(str(value))).strip()
+    if not expanded:
+        raise SystemExit(f"{label} is empty; set it in the protocol or export the matching environment variable")
+    unresolved = ENV_VAR_PATTERN.search(expanded)
+    if unresolved:
+        variable = unresolved.group(1) or unresolved.group(2)
+        raise SystemExit(f"{label} references ${variable}, but environment variable {variable} is not set")
+    return expanded
+
+
+def gmx_runtime(profile: dict[str, Any]) -> tuple[str, str]:
+    runtime = profile["runtime"]
+    return (
+        expand_runtime_env(runtime["gmxrc"], "runtime.gmxrc"),
+        expand_runtime_env(runtime["gmx_bin"], "runtime.gmx_bin"),
+    )
 
 
 def load_dataset(path: Path) -> list[dict[str, str]]:
@@ -457,9 +477,7 @@ def run_logged(
 
 
 def bash_gmx_command(profile: dict[str, Any], rep: Path, gpu_id: str | int, args: list[str]) -> str:
-    runtime = profile["runtime"]
-    gmxrc = str(runtime["gmxrc"])
-    gmx_bin = str(runtime["gmx_bin"])
+    gmxrc, gmx_bin = gmx_runtime(profile)
     quoted = " ".join(shlex_quote(str(arg)) for arg in args)
     script = (
         "set -eo pipefail; "

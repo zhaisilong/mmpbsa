@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.1 - 2026-06-02
+
+- Replaced machine-specific GROMACS `GMXRC` paths in checked-in protocols with
+  the portable `${GMXRC}` environment placeholder.
+- Updated runtime and doctor handling so `GMXRC`, `GMX_BIN`, and `MAMBA_ENV`
+  overrides are resolved consistently.
+- Added tests for portable GROMACS runtime resolution and doctor overrides.
+
 ## v0.1.0 - 2026-06-02
 
 - Added the local Spiliotopoulos 2016 `core8 + second4` peptide 3x5ns MMPBSA

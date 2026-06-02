@@ -54,12 +54,13 @@ gmx_mpi --version
 
 ## Machine-Specific Runtime Settings
 
-The protocol YAML contains runtime defaults:
+The protocol YAML contains runtime defaults. Checked-in configs use `${GMXRC}`
+for portability, so export `GMXRC` on each machine or replace it in a local copy:
 
 ```yaml
 runtime:
   mamba_env: md
-  gmxrc: /path/to/gromacs/bin/GMXRC
+  gmxrc: ${GMXRC}
   gmx_bin: gmx_mpi
   gpu_id: 0
 ```

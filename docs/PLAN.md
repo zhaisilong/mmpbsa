@@ -2,7 +2,7 @@
 
 ## Summary
 
-- v0.1.0 is prepared for GitHub publication at `git@github.com:zhaisilong/mmpbsa.git`.
+- v0.1.1 is prepared for GitHub publication at `git@github.com:zhaisilong/mmpbsa.git`.
 - Initialize the project as a git repository with `README.md`, `CHANGELOG.md`, `docs/PLAN.md`, `docs/setups.md`, `scripts/`, `configs/`, `tests/`, and a Python package.
 - Refactor the peptide workflow from `mmpbsa_v3` and the small-molecule workflow from `mmpbsa_sm` into one package named `mmpbsa`.
 - Use explicit CLI flows for peptide and small-molecule jobs instead of inferring type from fields.

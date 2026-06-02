@@ -4,9 +4,10 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from mmpbsa.benchmark import assign_jobs_to_gpus, experimental_delta_g_kj_mol, linear_fit, load_sdf_records, pearson_r, spearman_r
-from mmpbsa.common import frame_settings, load_profile
+from mmpbsa.common import frame_settings, gmx_runtime, load_profile
 from mmpbsa.ligand import ligand_input_format, mol2_total_charge, run_ligand_prepare
 from mmpbsa.ligand_amber import tleap_text
 from mmpbsa.ligand_pipeline import infer_dielectric_policy, mmpbsa_input_text, select_interface_waters
@@ -148,6 +149,18 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(settings["frames_per_replica"], 101)
         self.assertEqual(settings["replica_count"], 3)
         self.assertEqual(settings["expected_mmpbsa_frames"], 303)
+
+    def test_gmx_runtime_expands_environment(self) -> None:
+        profile = {"runtime": {"gmxrc": "${GMXRC}", "gmx_bin": "${GMX_BIN}"}}
+        with patch.dict("os.environ", {"GMXRC": "/opt/gromacs/bin/GMXRC", "GMX_BIN": "gmx_mpi"}, clear=True):
+            self.assertEqual(gmx_runtime(profile), ("/opt/gromacs/bin/GMXRC", "gmx_mpi"))
+
+    def test_gmx_runtime_requires_set_environment(self) -> None:
+        profile = {"runtime": {"gmxrc": "${GMXRC}", "gmx_bin": "gmx_mpi"}}
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(SystemExit) as error:
+                gmx_runtime(profile)
+        self.assertIn("GMXRC", str(error.exception))
 
     def test_ligand_helpers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -292,6 +305,24 @@ class CoreTests(unittest.TestCase):
         self.assertIn("peptide", result.output)
         self.assertIn("ligand", result.output)
         self.assertIn("benchmark", result.output)
+
+    def test_doctor_applies_runtime_environment_overrides(self) -> None:
+        if not CLICK_AVAILABLE:
+            self.skipTest("click is not installed in this Python environment")
+
+        completed = type("Completed", (), {"returncode": 0, "stdout": ""})()
+        with patch("mmpbsa.cli.subprocess.run", return_value=completed) as run:
+            with patch.dict(
+                "os.environ",
+                {"MAMBA_ENV": "custom_md", "GMXRC": "/opt/gromacs/bin/GMXRC", "GMX_BIN": "gmx_custom"},
+                clear=True,
+            ):
+                result = CliRunner().invoke(cli, ["doctor", "--protocol", str(ROOT / "configs" / "default_15ns.yaml")])
+
+        self.assertEqual(result.exit_code, 0)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn(["mamba", "run", "-n", "custom_md", "which", "MMPBSA.py"], commands)
+        self.assertIn(["bash", "-lc", "source '/opt/gromacs/bin/GMXRC' && which 'gmx_custom'"], commands)
 
     def test_benchmark_sdf_split_and_delta_g(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

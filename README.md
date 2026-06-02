@@ -20,9 +20,9 @@ The command-line entrypoint is `mmpbsa`.
 ## Environment
 
 The pipeline expects an MD environment with AmberTools/MMPBSA.py, GROMACS,
-ACPYPE, and common Amber ligand tools available. The default protocols assume a
-mamba environment named `md`, but runtime settings can be overridden through
-environment variables:
+ACPYPE, and common Amber ligand tools available. The checked-in protocols assume
+a mamba environment named `md` and use `${GMXRC}` as a portable GROMACS setup
+placeholder. Export runtime settings for the target machine before running:
 
 ```bash
 MAMBA_ENV=md \

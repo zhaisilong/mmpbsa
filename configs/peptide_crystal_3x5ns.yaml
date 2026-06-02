@@ -61,7 +61,7 @@ export:
 
 runtime:
   mamba_env: md
-  gmxrc: /data2/silong/projects/gromacs/gromacs202602/bin/GMXRC
+  gmxrc: ${GMXRC}
   gmx_bin: gmx_mpi
   gpu_id: 0
   mpi4py_path: ""
