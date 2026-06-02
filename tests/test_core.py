@@ -10,7 +10,7 @@ from mmpbsa.benchmark import assign_jobs_to_gpus, experimental_delta_g_kj_mol, l
 from mmpbsa.common import frame_settings, gmx_runtime, load_profile
 from mmpbsa.ligand import ligand_input_format, mol2_total_charge, run_ligand_prepare
 from mmpbsa.ligand_amber import tleap_text
-from mmpbsa.ligand_pipeline import infer_dielectric_policy, mmpbsa_input_text, select_interface_waters
+from mmpbsa.ligand_pipeline import infer_dielectric_policy, ligand_replica_ante_mmpbsa_command, mmpbsa_input_text, select_interface_waters
 from mmpbsa.peptide_pipeline import mmpbsa_input_text as peptide_mmpbsa_input_text
 from mmpbsa.peptide_pipeline import peptide_dielectric_policy
 from mmpbsa.runner import DoneFileRunner, JobContext, discover_job_contexts
@@ -254,6 +254,17 @@ class CoreTests(unittest.TestCase):
         self.assertIn("radiopt=0", text)
         self.assertIn("inp=2", text)
         self.assertIn("entropy=1", text)
+
+    def test_ligand_replica_ante_mmpbsa_uses_selected_complex_input(self) -> None:
+        profile = load_profile(ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml")
+        command = ligand_replica_ante_mmpbsa_command({"ligand_residue_mask": ":289"}, profile)
+        self.assertEqual(command[command.index("-p") + 1], "complex.prmtop")
+        self.assertEqual(command[command.index("-r") + 1], "receptor.prmtop")
+        self.assertEqual(command[command.index("-l") + 1], "ligand.prmtop")
+        self.assertEqual(command[command.index("-n") + 1], ":289")
+        self.assertIn("--radii=mbondi2", command)
+        self.assertNotIn("-c", command)
+        self.assertNotIn("complex_selected.prmtop", command)
 
     def test_peptide_dielectric_policy_config_and_auto(self) -> None:
         profile = load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml")

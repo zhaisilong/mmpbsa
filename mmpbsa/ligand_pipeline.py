@@ -451,25 +451,9 @@ run
             out = self.paths.mmpbsa / rep_dir.name
             out.mkdir(parents=True, exist_ok=True)
             write_index(out / "protein_ligand_water.ndx", {"ComplexWater": complex_water_atoms})
-            self.write_selected_topology(out / "complex_selected.prmtop", keep_residues, rep_dir.name)
+            self.write_selected_topology(out / "complex.prmtop", keep_residues, rep_dir.name)
             run_logged(
-                mamba_command(
-                    self.profile,
-                    [
-                        "ante-MMPBSA.py",
-                        "-p",
-                        "complex_selected.prmtop",
-                        "-c",
-                        "complex.prmtop",
-                        "-r",
-                        "receptor.prmtop",
-                        "-l",
-                        "ligand.prmtop",
-                        "-n",
-                        str(manifest["ligand_residue_mask"]),
-                        f"--radii={self.profile['amber_prep'].get('pb_radii', 'mbondi2')}",
-                    ],
-                ),
+                mamba_command(self.profile, ligand_replica_ante_mmpbsa_command(manifest, self.profile)),
                 self.paths.logs / f"ante_mmpbsa_{rep_dir.name}.log",
                 cwd=out,
             )
@@ -878,6 +862,21 @@ def select_interface_waters(system_pdb: Path, ligand_mask: str, count: int) -> l
     if len(selected) < count:
         raise RuntimeError(f"Requested {count} explicit waters, but only found {len(selected)} candidates in {system_pdb}")
     return selected
+
+
+def ligand_replica_ante_mmpbsa_command(manifest: dict[str, Any], profile: dict[str, Any]) -> list[str]:
+    return [
+        "ante-MMPBSA.py",
+        "-p",
+        "complex.prmtop",
+        "-r",
+        "receptor.prmtop",
+        "-l",
+        "ligand.prmtop",
+        "-n",
+        str(manifest["ligand_residue_mask"]),
+        f"--radii={profile['amber_prep'].get('pb_radii', 'mbondi2')}",
+    ]
 
 
 def parse_entropy_terms(path: Path) -> dict[str, float]:
