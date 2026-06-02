@@ -254,6 +254,10 @@ class CoreTests(unittest.TestCase):
         self.assertIn("radiopt=0", text)
         self.assertIn("inp=2", text)
         self.assertIn("entropy=1", text)
+        self.assertIn("&nmode", text)
+        sanity = mmpbsa_input_text(manifest, profile, sanity=True)
+        self.assertNotIn("entropy=1", sanity)
+        self.assertNotIn("&nmode", sanity)
 
     def test_ligand_replica_ante_mmpbsa_uses_selected_complex_input(self) -> None:
         profile = load_profile(ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml")
@@ -303,10 +307,16 @@ class CoreTests(unittest.TestCase):
         self.assertIn("radiopt=0", text)
         self.assertIn("inp=2", text)
         self.assertIn("entropy=0", text)
+        self.assertNotIn("&nmode", text)
         manifest["mmpbsa_trajectory_preselected"] = True
         text = peptide_mmpbsa_input_text(manifest, profile, sanity=False)
         self.assertIn("startframe=1", text)
         self.assertIn("interval=1", text)
+        configured = json.loads(json.dumps(profile))
+        configured["mmpbsa"]["entropy"] = "pb"
+        text = peptide_mmpbsa_input_text(manifest, configured, sanity=False)
+        self.assertIn("entropy=1", text)
+        self.assertIn("&nmode", text)
 
     def test_cli_help(self) -> None:
         if not CLICK_AVAILABLE:

@@ -762,6 +762,7 @@ def peptide_replica_qc_summaries(
 
 
 def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity: bool) -> str:
+    entropy = 0 if sanity else 1 if entropy_enabled(profile) else 0
     if sanity:
         general = """&general
   startframe=1,
@@ -774,7 +775,6 @@ def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity:
 """
     else:
         settings = manifest["frame_settings"]
-        entropy = 1 if entropy_enabled(profile) else 0
         startframe = 1 if bool(manifest.get("mmpbsa_trajectory_preselected", False)) else int(settings["startframe"])
         interval = 1 if bool(manifest.get("mmpbsa_trajectory_preselected", False)) else int(settings["interval"])
         general = f"""&general
@@ -796,6 +796,10 @@ def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity:
     pb_radiopt = int(mmpbsa.get("pb_radiopt", 0))
     pb_prbrad = float(mmpbsa.get("pb_prbrad", 1.4))
     pb_fillratio = float(mmpbsa.get("pb_fillratio", 4.0))
+    nmode = f"""&nmode
+  dielc={epsilon:.3f},
+/
+""" if entropy else ""
     return (
         general
         + f"""&gb
@@ -813,10 +817,8 @@ def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity:
   prbrad={pb_prbrad:.3f},
   fillratio={pb_fillratio:.3f},
 /
-&nmode
-  dielc={epsilon:.3f},
-/
 """
+        + nmode
     )
 
 

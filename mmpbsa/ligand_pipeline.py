@@ -479,12 +479,24 @@ run
         return selected_waters
 
     def write_selected_topology(self, output: Path, keep_residues: list[int], replica_name: str) -> None:
+        import parmed as pmd
+        from parmed.amber._amberparm import PrmtopPointers
+
         keep_mask = ",".join(str(resnum) for resnum in keep_residues)
-        script = f"strip !(:{keep_mask})\noutparm {output}\nquit\n"
-        run_logged(
-            mamba_command(self.profile, ["parmed", "-O", "-p", str(self.paths.amber / "system_solvated.prmtop")]),
+        source = self.paths.amber / "system_solvated.prmtop"
+        parm = pmd.load_file(str(source))
+        parm.strip(f"!(:{keep_mask})")
+        parm.box = None
+        parm.hasbox = False
+        if "POINTERS" in parm.parm_data:
+            parm.parm_data["POINTERS"][PrmtopPointers.IFBOX] = 0
+        for flag in ["BOX_DIMENSIONS", "SOLVENT_POINTERS", "ATOMS_PER_MOLECULE"]:
+            if flag in parm.flag_list:
+                parm.delete_flag(flag)
+        parm.save(str(output), overwrite=True)
+        write_text_atomic(
             self.paths.logs / f"parmed_selected_topology_{replica_name}.log",
-            stdin=script,
+            f"source: {source}\noutput: {output}\nstrip_mask: !(:{keep_mask})\nifbox: 0\natom_count: {len(parm.atoms)}\n",
         )
 
     def step_analysis_qc(self) -> None:
@@ -879,6 +891,10 @@ def ligand_replica_ante_mmpbsa_command(manifest: dict[str, Any], profile: dict[s
     ]
 
 
+def entropy_enabled(profile: dict[str, Any]) -> bool:
+    return str(profile.get("mmpbsa", {}).get("entropy", "none")).lower() in {"pb", "pb_only", "qh", "true"}
+
+
 def parse_entropy_terms(path: Path) -> dict[str, float]:
     text = path.read_text(encoding="utf-8", errors="replace")
     patterns = {
@@ -925,6 +941,7 @@ def aggregate_replica_values(values_by_replica: list[dict[str, float]]) -> dict[
 
 
 def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity: bool) -> str:
+    entropy = 0 if sanity else 1 if entropy_enabled(profile) else 0
     if sanity:
         general = """&general
   startframe=1,
@@ -937,7 +954,6 @@ def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity:
 """
     else:
         settings = manifest["frame_settings"]
-        entropy = 1 if str(profile.get("mmpbsa", {}).get("entropy", "none")).lower() in {"pb", "pb_only", "qh", "true"} else 0
         startframe = 1 if bool(manifest.get("mmpbsa_trajectory_preselected", False)) else int(settings["startframe"])
         interval = 1 if bool(manifest.get("mmpbsa_trajectory_preselected", False)) else int(settings["interval"])
         general = f"""&general
@@ -959,6 +975,10 @@ def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity:
     pb_radiopt = int(mmpbsa.get("pb_radiopt", 0))
     pb_prbrad = float(mmpbsa.get("pb_prbrad", 1.4))
     pb_fillratio = float(mmpbsa.get("pb_fillratio", 4.0))
+    nmode = f"""&nmode
+  dielc={epsilon:.3f},
+/
+""" if entropy else ""
     return (
         general
         + f"""&gb
@@ -976,10 +996,8 @@ def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity:
   prbrad={pb_prbrad:.3f},
   fillratio={pb_fillratio:.3f},
 /
-&nmode
-  dielc={epsilon:.3f},
-/
 """
+        + nmode
     )
 
 
