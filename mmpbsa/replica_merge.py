@@ -8,6 +8,14 @@ from .common import aggregate_replica_values, read_json, write_csv_atomic, write
 
 
 def merge_peptide_replicas(output_job_dir: Path, source_job_dirs: list[Path], force: bool = False) -> dict[str, Any]:
+    return merge_replicas(output_job_dir, source_job_dirs, force=force, label="peptide")
+
+
+def merge_ligand_replicas(output_job_dir: Path, source_job_dirs: list[Path], force: bool = False) -> dict[str, Any]:
+    return merge_replicas(output_job_dir, source_job_dirs, force=force, label="ligand")
+
+
+def merge_replicas(output_job_dir: Path, source_job_dirs: list[Path], force: bool = False, label: str = "job") -> dict[str, Any]:
     if not source_job_dirs:
         raise SystemExit("At least one source job directory is required")
     output = output_job_dir.resolve()
@@ -48,7 +56,7 @@ def merge_peptide_replicas(output_job_dir: Path, source_job_dirs: list[Path], fo
         "replica_indices": indices,
         "replica_seeds": seeds,
         "issues": [issue | {"replica": item["replica"]} for item in merged_replicas for issue in item.get("audit", {}).get("issues", [])],
-        "notes": ["Merged from independently calculated peptide replica jobs."],
+        "notes": [f"Merged from independently calculated {label} replica jobs."],
         "values": values,
         "replicas": merged_replicas,
         "merged_from": [record["job_id"] for record in source_records],
@@ -112,12 +120,18 @@ def merged_summary(job_id: str, sources: list[dict[str, Any]], audit: dict[str, 
         "replica_seeds": audit["replica_seeds"],
         "replicas": [item["replica"] for item in audit["replicas"]],
         "merged_from": audit["merged_from"],
-        "deltaG_exp_kJ_mol": first.get("deltaG_exp_kJ_mol"),
-        "paper_mm_pbsa_kJ_mol": first.get("paper_mm_pbsa_kJ_mol"),
-        "paper_dmm_pbsa_kJ_mol": first.get("paper_dmm_pbsa_kJ_mol"),
-        "paper_vdw_kJ_mol": first.get("paper_vdw_kJ_mol"),
     }
     for key in [
+        "deltaG_exp_kJ_mol",
+        "paper_mm_pbsa_kJ_mol",
+        "paper_dmm_pbsa_kJ_mol",
+        "paper_vdw_kJ_mol",
+        "ligand_resname",
+        "ligand_charge",
+        "ligand_param_mode",
+        "charge_method",
+        "ic50_nM",
+        "kd_nM",
         "dielectric_source",
         "dielectric_class",
         "dielectric_epsilon",
@@ -125,6 +139,7 @@ def merged_summary(job_id: str, sources: list[dict[str, Any]], audit: dict[str, 
         "entropy_enabled",
         "entropy_method",
         "frames_per_replica",
+        "mmpbsa_enabled",
     ]:
         if key in first:
             summary[key] = first[key]

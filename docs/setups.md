@@ -98,9 +98,16 @@ Core protocols:
 - `configs/ligand_crystal_3x5ns.yaml`: ligand crystal-start default, 3
   independent 5 ns replicas, explicit water MD, RESP input expected, MMPBSA
   disabled by default.
+- `configs/ligand_crystal_3x15ns.yaml`: longer ligand crystal-start protocol
+  with 3 independent 15 ns replicas; intended for GPU-rich crystal/docked
+  starts when more relaxation is desired.
+- `configs/ligand_crystal_1x15ns.yaml`: single-replica 15 ns ligand template
+  for explicit `--replica-index N` reruns that can be merged later.
 - `configs/ligand_crystal_5x5ns.yaml`: optional 5-replica ligand protocol.
 - `configs/ligand_crystal_3x5ns_mmpbsa_bcc.yaml`: local validation profile with
   MMPBSA enabled and AM1-BCC ligand charges.
+- `configs/ligand_crystal_3x15ns_mmpbsa_bcc.yaml`: longer local validation
+  profile with MMPBSA enabled and AM1-BCC ligand charges.
 - `configs/smoke_20ps.yaml`: short smoke settings for environment validation.
 
 Inspect frame selection:
@@ -109,6 +116,7 @@ Inspect frame selection:
 mmpbsa frame-settings --protocol configs/default_15ns.yaml
 mmpbsa frame-settings --protocol configs/peptide_crystal_3x5ns.yaml
 mmpbsa frame-settings --protocol configs/peptide_crystal_3x15ns.yaml
+mmpbsa frame-settings --protocol configs/ligand_crystal_3x15ns.yaml
 ```
 
 ## Job Directory Template
@@ -174,12 +182,24 @@ Resume a job:
 
 ```bash
 mmpbsa peptide run RUN_DIR --job-id demo_peptide --resume
+mmpbsa ligand run RUN_DIR --job-id demo_ligand --resume
 ```
 
 Force rerun MD and downstream state:
 
 ```bash
 mmpbsa peptide run RUN_DIR --job-id demo_peptide --mode md --force
+```
+
+Run and merge an additional numbered ligand replica:
+
+```bash
+mmpbsa ligand run RUN_DIR --job-id demo_ligand \
+  --protocol configs/ligand_crystal_1x15ns.yaml \
+  --replica-index 4 --resume
+
+mmpbsa ligand merge-replicas RUN_DIR/demo_ligand_merged \
+  RUN_DIR/demo_ligand_rep01 RUN_DIR/demo_ligand_rep04
 ```
 
 Summarize:

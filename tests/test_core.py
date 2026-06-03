@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from mmpbsa.analysis import add_dmm
@@ -18,7 +19,7 @@ from mmpbsa.peptide_pipeline import PeptidePipeline
 from mmpbsa.peptide_pipeline import mmpbsa_input_text as peptide_mmpbsa_input_text
 from mmpbsa.peptide_pipeline import peptide_dielectric_policy
 from mmpbsa.metrics import linear_fit, pearson_r, spearman_r
-from mmpbsa.replica_merge import merge_peptide_replicas
+from mmpbsa.replica_merge import merge_ligand_replicas, merge_peptide_replicas
 from mmpbsa.runner import DoneFileRunner, JobContext, discover_job_contexts
 from validation.ligand_tyk2.scaffold import assign_jobs_to_gpus, experimental_delta_g_kj_mol, load_sdf_records
 
@@ -268,6 +269,19 @@ CL- 1
         self.assertEqual(settings["replica_count"], 3)
         self.assertEqual(settings["expected_mmpbsa_frames"], 303)
 
+    def test_frame_settings_ligand_crystal_3x15ns_replicas(self) -> None:
+        profile = load_profile(ROOT / "configs" / "ligand_crystal_3x15ns.yaml")
+        settings = frame_settings(profile)
+        self.assertEqual(settings["startframe"], 251)
+        self.assertEqual(settings["interval"], 1)
+        self.assertEqual(settings["total_frames"], 751)
+        self.assertEqual(settings["frames_per_replica"], 501)
+        self.assertEqual(settings["replica_count"], 3)
+        self.assertEqual(settings["replica_indices"], [1, 2, 3])
+        self.assertEqual(settings["replica_names"], ["rep01", "rep02", "rep03"])
+        self.assertEqual(settings["expected_mmpbsa_frames"], 1503)
+        self.assertEqual(profile["protocol"]["min_mmpbsa_frames"], 1500)
+
     def test_frame_settings_peptide_crystal_replicas(self) -> None:
         settings = frame_settings(load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml"))
         self.assertEqual(settings["startframe"], 151)
@@ -290,6 +304,16 @@ CL- 1
 
     def test_replica_index_override_keeps_global_seed(self) -> None:
         profile = load_profile(ROOT / "configs" / "peptide_crystal_3x15ns.yaml")
+        single = profile_with_replica_indices(profile, [4], scale_min_frames=True)
+        self.assertEqual(replica_indices(single), [4])
+        self.assertEqual(replica_names(single), ["rep04"])
+        self.assertEqual(single["protocol"]["min_mmpbsa_frames"], 500)
+        self.assertEqual(replica_seed_map(single), {"rep04": 2026052405})
+        nvt = mdp_texts(single, replica_index=replica_indices(single)[0])["nvt.mdp"]
+        self.assertIn("gen-seed                = 2026052405", nvt)
+
+    def test_ligand_replica_index_override_keeps_global_seed(self) -> None:
+        profile = load_profile(ROOT / "configs" / "ligand_crystal_3x15ns.yaml")
         single = profile_with_replica_indices(profile, [4], scale_min_frames=True)
         self.assertEqual(replica_indices(single), [4])
         self.assertEqual(replica_names(single), ["rep04"])
@@ -342,7 +366,28 @@ CL- 1
             with self.assertRaises(SystemExit):
                 merge_peptide_replicas(root / "merged", [source_a, source_b])
 
-    def write_replica_source(self, root: Path, job_id: str, replica: str, seed: int, value: float) -> Path:
+    def test_merge_ligand_replicas_aggregates_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            extra = {"ligand_resname": "LIG", "ligand_charge": 0, "charge_method": "bcc", "ic50_nM": 42.0}
+            source_a = self.write_replica_source(root, "lig_rep02", "rep02", 2026052403, -20.0, extra)
+            source_b = self.write_replica_source(root, "lig_rep05", "rep05", 2026052406, -26.0, extra)
+            output = root / "merged_ligand"
+
+            report = merge_ligand_replicas(output, [source_a, source_b])
+
+            self.assertEqual(report["replica_indices"], [2, 5])
+            summary = json.loads((output / "result" / "summary.json").read_text(encoding="utf-8"))
+            audit = json.loads((output / "analysis" / "mmpbsa" / "audit.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["replica_count"], 2)
+            self.assertEqual(summary["ligand_resname"], "LIG")
+            self.assertEqual(summary["charge_method"], "bcc")
+            self.assertEqual(summary["ic50_nM"], 42.0)
+            self.assertAlmostEqual(summary["GB_delta_total_kJ_mol"], -23.0)
+            self.assertAlmostEqual(summary["PB_delta_total_kJ_mol"], -46.0)
+            self.assertIn("ligand replica jobs", audit["notes"][0])
+
+    def write_replica_source(self, root: Path, job_id: str, replica: str, seed: int, value: float, extra_summary: dict[str, Any] | None = None) -> Path:
         job_dir = root / job_id
         (job_dir / "analysis" / "mmpbsa").mkdir(parents=True)
         (job_dir / "result").mkdir()
@@ -363,6 +408,8 @@ CL- 1
             ],
         }
         summary = {"job_id": job_id, "name": job_id, "status": "valid", "frames_per_replica": 501}
+        if extra_summary:
+            summary.update(extra_summary)
         (job_dir / "analysis" / "mmpbsa" / "audit.json").write_text(json.dumps(audit), encoding="utf-8")
         (job_dir / "result" / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
         return job_dir
@@ -389,8 +436,11 @@ CL- 1
         normal_protocols = [
             "default_15ns.yaml",
             "ligand_default_15ns.yaml",
+            "ligand_crystal_1x15ns.yaml",
             "ligand_crystal_3x5ns.yaml",
             "ligand_crystal_3x5ns_mmpbsa_bcc.yaml",
+            "ligand_crystal_3x15ns.yaml",
+            "ligand_crystal_3x15ns_mmpbsa_bcc.yaml",
             "ligand_crystal_5x5ns.yaml",
             "peptide_crystal_1x15ns.yaml",
             "peptide_crystal_3x5ns.yaml",
@@ -748,6 +798,12 @@ CL- 1
         peptide_run_help = CliRunner().invoke(cli, ["peptide", "run", "--help"])
         self.assertEqual(peptide_run_help.exit_code, 0)
         self.assertIn("--replica-index", peptide_run_help.output)
+        ligand_help = CliRunner().invoke(cli, ["ligand", "--help"])
+        self.assertEqual(ligand_help.exit_code, 0)
+        self.assertIn("merge-replicas", ligand_help.output)
+        ligand_run_help = CliRunner().invoke(cli, ["ligand", "run", "--help"])
+        self.assertEqual(ligand_run_help.exit_code, 0)
+        self.assertIn("--replica-index", ligand_run_help.output)
 
     def test_doctor_applies_runtime_environment_overrides(self) -> None:
         if not CLICK_AVAILABLE:

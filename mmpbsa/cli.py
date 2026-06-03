@@ -12,7 +12,7 @@ from .aggregate import aggregate_run_dir
 from .common import DEFAULT_LIGAND_PROFILE, DEFAULT_PROFILE, frame_settings, gmx_runtime, load_profile, mpi_pythonpath, profile_with_replica_indices, shlex_quote
 from .ligand_pipeline import LigandPipeline
 from .peptide_pipeline import PeptidePipeline
-from .replica_merge import merge_peptide_replicas
+from .replica_merge import merge_ligand_replicas, merge_peptide_replicas
 from .runner import DoneFileRunner, apply_env_overrides, discover_job_contexts
 
 
@@ -100,8 +100,18 @@ def ligand() -> None:
 @click.option("--mode", type=click.Choice(["full", "prepare", "md", "analysis", "report"]), default="full", show_default=True, help="Stage group to run.")
 @click.option("--job-id", help="Run only RUN_DIR/<job-id>/<job-id>.json.")
 @ligand_protocol_option
-def ligand_run(run_dir: Path, protocol_path: Path, job_id: str | None, mode: str, resume: bool, force: bool) -> None:
-    run_pipeline(LigandPipeline, run_dir, protocol_path, job_id, mode, resume, force)
+@click.option("--replica-index", type=click.IntRange(1), help="Run one explicit replica index, for example 4 creates rep04 with seed_base+4.")
+def ligand_run(run_dir: Path, protocol_path: Path, job_id: str | None, replica_index: int | None, mode: str, resume: bool, force: bool) -> None:
+    run_pipeline(LigandPipeline, run_dir, protocol_path, job_id, mode, resume, force, replica_index=replica_index)
+
+
+@ligand.command("merge-replicas")
+@click.argument("output_job_dir", type=click.Path(path_type=Path, file_okay=False))
+@click.argument("source_job_dirs", nargs=-1, type=click.Path(path_type=Path, file_okay=False))
+@click.option("--force", is_flag=True, help="Overwrite merged audit/summary outputs if they already exist.")
+def ligand_merge_replicas(output_job_dir: Path, source_job_dirs: tuple[Path, ...], force: bool) -> None:
+    report = merge_ligand_replicas(output_job_dir, list(source_job_dirs), force=force)
+    click.echo(json.dumps(report, indent=2))
 
 
 @cli.command()

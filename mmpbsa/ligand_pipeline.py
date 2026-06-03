@@ -37,7 +37,9 @@ from .common import (
     read_json,
     remove_paths,
     replica_count,
+    replica_indices,
     replica_names,
+    replica_seed_map,
     residue_atoms,
     run_logged,
     shlex_quote,
@@ -285,6 +287,9 @@ class LigandPipeline(DoneFileRunner):
             "ic50_nM": optional_float(row.get("ic50_nM")),
             "kd_nM": optional_float(row.get("kd_nM")),
             "frame_settings": settings,
+            "replica_indices": replica_indices(self.profile),
+            "replicas": replica_names(self.profile),
+            "replica_seeds": replica_seed_map(self.profile),
             "created_at": utc_now(),
             "runtime_overrides": {
                 "GPU_ID": os.environ.get("GPU_ID"),
@@ -373,7 +378,9 @@ class LigandPipeline(DoneFileRunner):
         mmpbsa_manifest = {
             "enabled": mmpbsa_enabled(self.profile),
             "replica_count": replica_count(self.profile),
+            "replica_indices": replica_indices(self.profile),
             "replicas": replica_names(self.profile),
+            "replica_seeds": replica_seed_map(self.profile),
             "explicit_water_count": explicit_water_count(self.profile),
         }
         if mmpbsa_enabled(self.profile):
@@ -614,6 +621,7 @@ color tv_red, chain B
             return
 
         replicas: list[dict[str, Any]] = []
+        seeds = replica_seed_map(self.profile)
         for name in replica_names(self.profile):
             rep_dir = self.paths.mmpbsa / name
             sanity_cmd = [
@@ -677,7 +685,15 @@ color tv_red, chain B
                 ]
             env = {"PYTHONPATH": mpi_pythonpath(self.profile)}
             run_logged(mamba_command(self.profile, cmd), self.paths.logs / f"mmpbsa_{name}.log", cwd=rep_dir, env=env)
-            replicas.append({"replica": name, "output": str(rep_dir / "FINAL_RESULTS_MMPBSA.dat"), "per_frame_energy": str(rep_dir / "per_frame_energy.csv")})
+            replicas.append(
+                {
+                    "replica": name,
+                    "replica_index": int(name.replace("rep", "")),
+                    "seed": seeds[name],
+                    "output": str(rep_dir / "FINAL_RESULTS_MMPBSA.dat"),
+                    "per_frame_energy": str(rep_dir / "per_frame_energy.csv"),
+                }
+            )
         write_json_atomic(self.paths.mmpbsa / "mmpbsa_replicas.json", {"replicas": replicas})
 
     def step_analysis_audit(self) -> None:
@@ -688,6 +704,9 @@ color tv_red, chain B
                 "job_id": manifest["job_id"],
                 "frames": 0,
                 "min_frames": int(self.profile["protocol"]["min_mmpbsa_frames"]),
+                "replica_count": replica_count(self.profile),
+                "replica_indices": replica_indices(self.profile),
+                "replica_seeds": replica_seed_map(self.profile),
                 "issues": [],
                 "notes": ["MMPBSA skipped because mmpbsa.enabled=false."],
                 "values": {},
@@ -698,6 +717,7 @@ color tv_red, chain B
 
         per_replica: list[dict[str, Any]] = []
         min_frames = max(1, int(round(int(self.profile["protocol"]["min_mmpbsa_frames"]) / replica_count(self.profile))))
+        seeds = replica_seed_map(self.profile)
         for name in replica_names(self.profile):
             output = self.paths.mmpbsa / name / "FINAL_RESULTS_MMPBSA.dat"
             parsed = parse_mmpbsa_full(output)
@@ -711,7 +731,17 @@ color tv_red, chain B
             values = dict(parsed["values"])
             values.update(entropy)
             add_pb_entropy_corrected(values)
-            per_replica.append({"replica": name, "audit": audit, "values": values, "frames": parsed["frames"], "output": str(output)})
+            per_replica.append(
+                {
+                    "replica": name,
+                    "replica_index": int(name.replace("rep", "")),
+                    "seed": seeds[name],
+                    "audit": audit,
+                    "values": values,
+                    "frames": parsed["frames"],
+                    "output": str(output),
+                }
+            )
         values = aggregate_replica_values([item["values"] for item in per_replica])
         audit = {
             "status": "invalid" if any(item["audit"]["status"] != "valid" for item in per_replica) else "valid",
@@ -720,6 +750,8 @@ color tv_red, chain B
             "min_frames": int(self.profile["protocol"]["min_mmpbsa_frames"]),
             "replica_min_frames": min_frames,
             "replica_count": replica_count(self.profile),
+            "replica_indices": replica_indices(self.profile),
+            "replica_seeds": seeds,
             "issues": [issue | {"replica": item["replica"]} for item in per_replica for issue in item["audit"]["issues"]],
             "notes": ["Replica MMPBSA values are averaged across independent runs."],
             "values": values,
@@ -749,6 +781,11 @@ color tv_red, chain B
             "mmpbsa_frames": mmpbsa_audit["frames"],
             "trajectory_frames": traj_qc["frames"],
             "replica_count": replica_count(self.profile),
+            "replica_indices": replica_indices(self.profile),
+            "replicas": replica_names(self.profile),
+            "replica_seeds": replica_seed_map(self.profile),
+            "frames_per_replica": manifest.get("frame_settings", {}).get("frames_per_replica"),
+            "mmpbsa_frames_total": mmpbsa_audit["frames"],
             "mmpbsa_enabled": mmpbsa_enabled(self.profile),
             "explicit_water_count": explicit_water_count(self.profile),
             "dielectric_epsilon": manifest.get("dielectric_policy", {}).get("epsilon"),

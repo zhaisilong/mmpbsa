@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.5 - 2026-06-03
+
+- Added ligand `3x15ns`, `3x15ns_mmpbsa_bcc`, and `1x15ns` crystal-start
+  profiles matching the peptide long-replica workflow.
+- Added `mmpbsa ligand run --replica-index N` and
+  `mmpbsa ligand merge-replicas` for independently calculated ligand replica
+  extensions.
+- Extended ligand manifest, MMPBSA manifest, audit, and summary outputs with
+  stable replica indices and seed metadata.
+- Added a versioned TYK2 five-ligand 3x5ns validation report with replica
+  `mean +- SD` tables and correlation lines.
+- Updated the TYK2 validation scaffold default to the longer 3x15ns MMPBSA-BCC
+  profile while keeping it under `validation/` as project validation tooling.
+
 ## v0.1.4 - 2026-06-03
 
 - Added peptide `3x15ns` and `1x15ns` crystal-start profiles for longer AF3,

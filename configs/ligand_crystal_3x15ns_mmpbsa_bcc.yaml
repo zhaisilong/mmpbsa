@@ -1,0 +1,72 @@
+protocol:
+  replica_indices: [1, 2, 3]
+  replica_count: 3
+  production_ns: 15.0
+  xtc_interval_ps: 20.0
+  mmpbsa_start_ns: 5.0
+  mmpbsa_interval_ps: 20.0
+  min_mmpbsa_frames: 1500
+
+system:
+  temperature_k: 300.0
+  salt_molar: 0.150
+  solvent_padding_angstrom: 10.0
+  solvent_shape: box
+  allow_box_retry: false
+
+amber_prep:
+  recipe: protein_ligand_gaff2_tip3p
+  nonstandard_policy: strip
+  default_ligand_param_mode: auto
+  protein_ff: leaprc.protein.ff14SB
+  ligand_ff: leaprc.gaff2
+  water_ff: leaprc.water.tip3p
+  gaff_version: gaff2
+  charge_method: bcc
+  pb_radii: mbondi2
+  allow_charge_fallback: true
+
+md:
+  em_steps: 50000
+  emstep: 0.001
+  nvt_steps: 50000
+  npt_steps: 100000
+  seed_base: 2026052401
+  ntomp: 8
+
+mmpbsa:
+  enabled: true
+  mpi: true
+  np: 16
+  keep_tmp: false
+  explicit_water_count: 2
+  entropy: none
+  gb_igb: 5
+  gb_epsout: 78.5
+  pb_exdi: 80.0
+  pb_inp: 2
+  pb_radiopt: 0
+  pb_prbrad: 1.4
+  pb_fillratio: 4.0
+  internal_limit_kcal_mol: 20000.0
+  internal_std_limit_kcal_mol: 5000.0
+
+qc:
+  receptor_rmsd_fail_angstrom: 3.0
+  ligand_rmsd_warn_angstrom: 5.0
+  peptide_rmsd_warn_angstrom: 5.0
+  native_contacts_fail_min: 1
+  interface_distance_fail_angstrom: 5.0
+
+export:
+  pymol_stride: 25
+
+runtime:
+  mamba_env: md
+  gmxrc: ${GMXRC}
+  gmx_bin: gmx_mpi
+  gpu_id: 0
+  mpi4py_path: ""
+
+debug:
+  keep_step_tmp: false

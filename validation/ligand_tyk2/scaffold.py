@@ -23,7 +23,7 @@ from mmpbsa.metrics import linear_fit, pearson_r, spearman_r
 DEFAULT_TYK2_LIGANDS = ["lig_ejm_46", "lig_ejm_54", "lig_ejm_31", "lig_ejm_50", "lig_ejm_43"]
 GAS_CONSTANT_KJ_MOL_K = 8.31446261815324e-3
 DEFAULT_EXPERIMENT_TEMPERATURE_K = 298.15
-DEFAULT_PROTOCOL = PROJECT_ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml"
+DEFAULT_PROTOCOL = PROJECT_ROOT / "configs" / "ligand_crystal_3x15ns_mmpbsa_bcc.yaml"
 
 
 @dataclass(frozen=True)
@@ -267,10 +267,9 @@ def write_validation_report(run_dir: Path, resources_dir: Path, target: str, out
         config = json.loads((run_dir / job_id / f"{job_id}.json").read_text(encoding="utf-8"))
         ligand_name = config.get("validation_ligand_name") or config.get("benchmark_ligand_name") or config.get("name") or job_id
         measurement = measurements[str(ligand_name)]
-        summary_path = run_dir / job_id / "result" / "summary.json"
-        summary: dict[str, Any] = {}
-        if summary_path.exists():
-            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        job_dir = run_dir / job_id
+        summary = load_json_if_exists(job_dir / "result" / "summary.json")
+        audit = load_json_if_exists(job_dir / "analysis" / "mmpbsa" / "audit.json")
         row = {
             "job_id": job_id,
             "ligand": ligand_name,
@@ -279,11 +278,16 @@ def write_validation_report(run_dir: Path, resources_dir: Path, target: str, out
             "measurement_unit": measurement.unit,
             "experimental_deltaG_kJ_mol": measurement.delta_g_kj_mol,
             "status": summary.get("status", "incomplete"),
-            "GB_delta_total_kJ_mol": summary.get("GB_delta_total_kJ_mol"),
-            "PB_delta_total_kJ_mol": summary.get("PB_delta_total_kJ_mol"),
-            "PB_delta_total_entropy_corrected_kJ_mol": summary.get("PB_delta_total_entropy_corrected_kJ_mol"),
-            "GB_dMM_kJ_mol": summary.get("GB_dMM_kJ_mol", summary.get("GB_dmm_like_kJ_mol")),
-            "PB_dMM_kJ_mol": summary.get("PB_dMM_kJ_mol", summary.get("PB_dmm_like_kJ_mol")),
+            "replica_count": summary.get("replica_count", audit.get("replica_count")),
+            "mmpbsa_frames": summary.get("mmpbsa_frames", audit.get("frames")),
+            "GB_delta_total_kJ_mol": metric_value(summary, audit, "GB_delta_total_kJ_mol"),
+            "PB_delta_total_kJ_mol": metric_value(summary, audit, "PB_delta_total_kJ_mol"),
+            "GB_dMM_kJ_mol": metric_value(summary, audit, "GB_dMM_kJ_mol"),
+            "PB_dMM_kJ_mol": metric_value(summary, audit, "PB_dMM_kJ_mol"),
+            "GB_delta_total_kJ_mol_replica_sd": metric_sd(summary, audit, "GB_delta_total_kJ_mol"),
+            "PB_delta_total_kJ_mol_replica_sd": metric_sd(summary, audit, "PB_delta_total_kJ_mol"),
+            "GB_dMM_kJ_mol_replica_sd": metric_sd(summary, audit, "GB_dMM_kJ_mol"),
+            "PB_dMM_kJ_mol_replica_sd": metric_sd(summary, audit, "PB_dMM_kJ_mol"),
         }
         rows.append(row)
     rows.sort(key=lambda row: float(row["experimental_deltaG_kJ_mol"]))
@@ -292,7 +296,6 @@ def write_validation_report(run_dir: Path, resources_dir: Path, target: str, out
         for key in [
             "GB_delta_total_kJ_mol",
             "PB_delta_total_kJ_mol",
-            "PB_delta_total_entropy_corrected_kJ_mol",
             "GB_dMM_kJ_mol",
             "PB_dMM_kJ_mol",
         ]
@@ -300,6 +303,65 @@ def write_validation_report(run_dir: Path, resources_dir: Path, target: str, out
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report_markdown(target, run_dir, rows, correlations), encoding="utf-8")
     return {"output": str(output.resolve()), "rows": len(rows), "correlations": correlations}
+
+
+def load_json_if_exists(path: Path) -> dict[str, Any]:
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def metric_value(summary: dict[str, Any], audit: dict[str, Any], key: str) -> float | None:
+    for alias in metric_aliases(key):
+        value = summary.get(alias)
+        if isinstance(value, (int, float)):
+            return float(value)
+    audit_values = audit.get("values", {})
+    if isinstance(audit_values, dict):
+        for alias in metric_aliases(key):
+            value = audit_values.get(alias)
+            if isinstance(value, (int, float)):
+                return float(value)
+    return None
+
+
+def metric_sd(summary: dict[str, Any], audit: dict[str, Any], key: str) -> float | None:
+    for alias in metric_aliases(key):
+        for suffix in ("_replica_sd", "_sd"):
+            value = summary.get(f"{alias}{suffix}")
+            if isinstance(value, (int, float)):
+                return float(value)
+    audit_values = audit.get("values", {})
+    if isinstance(audit_values, dict):
+        for alias in metric_aliases(key):
+            for suffix in ("_replica_sd", "_sd"):
+                value = audit_values.get(f"{alias}{suffix}")
+                if isinstance(value, (int, float)):
+                    return float(value)
+    replicas = audit.get("replicas", [])
+    if not isinstance(replicas, list):
+        return None
+    values: list[float] = []
+    for replica in replicas:
+        if not isinstance(replica, dict) or not isinstance(replica.get("values"), dict):
+            continue
+        for alias in metric_aliases(key):
+            value = replica["values"].get(alias)
+            if isinstance(value, (int, float)):
+                values.append(float(value))
+                break
+    if len(values) < 2:
+        return None
+    mean = sum(values) / len(values)
+    return math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1))
+
+
+def metric_aliases(key: str) -> list[str]:
+    if "_dMM_" in key:
+        return [key, key.replace("_dMM_", "_dmm_like_")]
+    return [key]
 
 
 def correlation_record(rows: list[dict[str, Any]], computed_key: str) -> dict[str, Any]:
@@ -322,26 +384,27 @@ def report_markdown(target: str, run_dir: Path, rows: list[dict[str, Any]], corr
     lines = [
         f"# {target.upper()} Ligand MMPBSA Validation",
         "",
-        f"- Run directory: `{run_dir.resolve()}`",
+        f"- Run directory: `{project_relative(run_dir)}`",
         "- Source: `openforcefield/protein-ligand-benchmark`",
         f"- Experimental conversion: `DeltaG = RT ln(K)`, `T = {DEFAULT_EXPERIMENT_TEMPERATURE_K:.2f} K`",
         "",
         "## Results",
         "",
-        "| ligand | status | exp DeltaG kJ/mol | GB total | PB total | PB+entropy | GB dMM | PB dMM |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| ligand | status | replicas | frames | exp DeltaG kJ/mol | GB total mean +- SD | PB total mean +- SD | GB dMM mean +- SD | PB dMM mean +- SD |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
-            "| {ligand} | {status} | {exp} | {gb} | {pb} | {pbe} | {gbd} | {pbd} |".format(
+            "| {ligand} | {status} | {replicas} | {frames} | {exp} | {gb} | {pb} | {gbd} | {pbd} |".format(
                 ligand=row["ligand"],
                 status=row["status"],
+                replicas=format_int(row.get("replica_count")),
+                frames=format_int(row.get("mmpbsa_frames")),
                 exp=format_float(row["experimental_deltaG_kJ_mol"]),
-                gb=format_float(row.get("GB_delta_total_kJ_mol")),
-                pb=format_float(row.get("PB_delta_total_kJ_mol")),
-                pbe=format_float(row.get("PB_delta_total_entropy_corrected_kJ_mol")),
-                gbd=format_float(row.get("GB_dMM_kJ_mol")),
-                pbd=format_float(row.get("PB_dMM_kJ_mol")),
+                gb=format_mean_sd(row.get("GB_delta_total_kJ_mol"), row.get("GB_delta_total_kJ_mol_replica_sd")),
+                pb=format_mean_sd(row.get("PB_delta_total_kJ_mol"), row.get("PB_delta_total_kJ_mol_replica_sd")),
+                gbd=format_mean_sd(row.get("GB_dMM_kJ_mol"), row.get("GB_dMM_kJ_mol_replica_sd")),
+                pbd=format_mean_sd(row.get("PB_dMM_kJ_mol"), row.get("PB_dMM_kJ_mol_replica_sd")),
             )
         )
     lines.extend(["", "## Correlation Lines", ""])
@@ -372,15 +435,17 @@ def report_markdown(target: str, run_dir: Path, rows: list[dict[str, Any]], corr
     )
     lines.append(
         "- The five-ligand subset is a pipeline validation run. A production validation should expand the ligand set "
-        "and preferably use repeated trajectories before drawing method-level conclusions."
+        "before drawing method-level conclusions."
     )
     lines.extend(
         [
             "",
             "## Notes",
             "",
-            "- This report is generated from a small five-ligand TYK2 subset.",
+            "- This report is generated from a small five-ligand TYK2 subset and is versioned as project validation evidence.",
+            f"- Reported frame counts are read from existing MMPBSA audit files; completed rows here use {frame_count_note(rows)}.",
             "- MM/PBSA absolute values are not expected to match experimental affinities directly; use the correlation lines as a pipeline diagnostic.",
+            "- Entropy is disabled in the default ligand validation profiles; the report therefore focuses on GB, PB, and dMM scores.",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -397,10 +462,48 @@ def best_correlation_key(correlations: dict[str, dict[str, Any]]) -> str | None:
     return max(candidates)[1]
 
 
+def project_relative(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def frame_count_note(rows: list[dict[str, Any]]) -> str:
+    counts = sorted(
+        {
+            int(float(row["mmpbsa_frames"]))
+            for row in rows
+            if isinstance(row.get("mmpbsa_frames"), (int, float))
+        }
+    )
+    if not counts:
+        return "no completed MMPBSA frames"
+    if len(counts) == 1:
+        return f"{counts[0]} total frames per job"
+    return ", ".join(str(count) for count in counts) + " total frames per job"
+
+
 def format_float(value: Any) -> str:
     if not isinstance(value, (int, float)):
         return ""
     return f"{float(value):.3f}"
+
+
+def format_int(value: Any) -> str:
+    if not isinstance(value, (int, float)):
+        return ""
+    return str(int(float(value)))
+
+
+def format_mean_sd(value: Any, sd: Any) -> str:
+    mean = format_float(value)
+    if not mean:
+        return ""
+    if not isinstance(sd, (int, float)):
+        return mean
+    return f"{mean} +- {float(sd):.3f}"
 
 
 def main() -> None:

@@ -154,8 +154,11 @@ Peptide profiles:
 Ligand profiles:
 
 - `configs/ligand_crystal_3x5ns.yaml`: ligand crystal-start default, MMPBSA disabled.
+- `configs/ligand_crystal_3x15ns.yaml`: 3 independent 15 ns ligand replicas for GPU-rich crystal/docked starts.
+- `configs/ligand_crystal_1x15ns.yaml`: single-replica 15 ns template for targeted `repNN` ligand reruns.
 - `configs/ligand_crystal_5x5ns.yaml`: optional 5-replica version.
 - `configs/ligand_crystal_3x5ns_mmpbsa_bcc.yaml`: local validation profile with MMPBSA enabled and AM1-BCC fallback charges.
+- `configs/ligand_crystal_3x15ns_mmpbsa_bcc.yaml`: longer local validation profile with MMPBSA enabled and AM1-BCC fallback charges.
 
 Peptide MMPBSA uses Amber ff14SB and `mbondi2`. Profiles may explicitly set
 `mmpbsa.epsilon` or `mmpbsa.dielectric`; otherwise the pipeline applies the
@@ -177,6 +180,17 @@ mmpbsa peptide run RUN_DIR --job-id demo_peptide \
 
 mmpbsa peptide merge-replicas RUN_DIR/demo_peptide_merged \
   RUN_DIR/demo_peptide_rep01 RUN_DIR/demo_peptide_rep04
+```
+
+The ligand workflow supports the same explicit replica controls:
+
+```bash
+mmpbsa ligand run RUN_DIR --job-id demo_ligand \
+  --protocol configs/ligand_crystal_1x15ns.yaml \
+  --replica-index 4 --resume
+
+mmpbsa ligand merge-replicas RUN_DIR/demo_ligand_merged \
+  RUN_DIR/demo_ligand_rep01 RUN_DIR/demo_ligand_rep04
 ```
 
 Peptide input preparation is strict about HETATM records. New jobs keep the
@@ -227,4 +241,4 @@ python validation/peptide_3x5ns/report.py \
 - [Setup guide](docs/setups.md)
 - [Receptor cofactor guide](docs/receptor_cofactors.md)
 - [Peptide local validation notes](docs/peptide_3x5ns_mmpbsa.md)
-- [TYK2 ligand validation report](docs/tyk2_ligand_benchmark.md)
+- [TYK2 ligand 3x5ns validation report](docs/ligand_tyk2_3x5ns_validation.md)
