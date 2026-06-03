@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from .analysis import (
     write_trajectory_qc_csv,
 )
 from .common import (
+    aggregate_replica_values,
     explicit_water_count,
     flatten_atom_range,
     frame_settings,
@@ -24,6 +26,7 @@ from .common import (
     job_name,
     label_chains,
     mamba_command,
+    mmpbsa_enabled,
     model_id,
     mpi_pythonpath,
     parse_simple_mask,
@@ -32,7 +35,9 @@ from .common import (
     read_json,
     remove_paths,
     replica_count,
+    replica_indices,
     replica_names,
+    replica_seed_map,
     residue_atoms,
     run_logged,
     shlex_quote,
@@ -44,7 +49,7 @@ from .common import (
     write_json_atomic,
     write_text_atomic,
 )
-from .md import convert_to_gromacs, run_em, run_npt, run_nvt, run_production
+from .md import EmUnstableError, convert_to_gromacs, em_failure_atom_index, em_log_has_unstable_structure, find_gro_atom_overlaps, run_em, run_npt, run_nvt, run_production
 from .runner import DoneFileRunner, JobContext
 
 
@@ -148,9 +153,35 @@ class PeptidePipeline(DoneFileRunner):
 
     def required_outputs(self, step: str) -> list[Path]:
         p = self.paths
+        analysis_prepare = [
+            p.mmpbsa / "complex.prmtop",
+            p.mmpbsa / "receptor.prmtop",
+            p.mmpbsa / "peptide.prmtop",
+            p.mmpbsa / "md_prod_dry_center.nc",
+            p.mmpbsa / "mmpbsa_manifest.json",
+        ]
+        if mmpbsa_enabled(self.profile):
+            for name in replica_names(self.profile):
+                rep = p.mmpbsa / name
+                analysis_prepare.extend(
+                    [
+                        rep / "complex.prmtop",
+                        rep / "receptor.prmtop",
+                        rep / "peptide.prmtop",
+                        rep / "md_prod_dry_center.nc",
+                        rep / "mmpbsa.in",
+                    ]
+                )
+        mmpbsa_outputs = [p.mmpbsa / ".mmpbsa_skipped"] if not mmpbsa_enabled(self.profile) else [p.mmpbsa / "mmpbsa_replicas.json"]
         outputs: dict[str, list[Path]] = {
-            "init": [p.manifest, p.input / "selected.pdb"],
-            "prepare_input": [p.input / "selected_protein.pdb", p.manifest],
+            "init": [p.manifest, p.input / "selected_raw.pdb"],
+            "prepare_input": [
+                p.input / "selected.pdb",
+                p.input / "selected_protein.pdb",
+                p.input / "selected_receptor.pdb",
+                p.input / "selected_peptide.pdb",
+                p.manifest,
+            ],
             "amber_prepare": [
                 p.amber / "complex_dry.pdb",
                 p.amber / "complex_dry.prmtop",
@@ -163,13 +194,7 @@ class PeptidePipeline(DoneFileRunner):
             "md_nvt": self.replica_outputs("nvt.gro", "nvt.tpr", "nvt.cpt"),
             "md_npt": self.replica_outputs("npt.gro", "npt.tpr", "npt.cpt"),
             "md_production": self.replica_outputs("md_prod.gro", "md_prod.tpr", "md_prod.xtc"),
-            "analysis_prepare": [
-                p.mmpbsa / "complex.prmtop",
-                p.mmpbsa / "receptor.prmtop",
-                p.mmpbsa / "peptide.prmtop",
-                p.mmpbsa / "md_prod_dry_center.nc",
-                p.mmpbsa / "mmpbsa.in",
-            ],
+            "analysis_prepare": analysis_prepare,
             "analysis_qc": [
                 p.qc / "trajectory_qc.csv",
                 p.qc / "summary.json",
@@ -178,7 +203,7 @@ class PeptidePipeline(DoneFileRunner):
                 p.structures / "last.pdb",
                 p.structures / "pymol_trajectory.pdb",
             ],
-            "analysis_mmpbsa": [p.mmpbsa / "FINAL_RESULTS_MMPBSA.dat", p.mmpbsa / "per_frame_energy.csv"],
+            "analysis_mmpbsa": mmpbsa_outputs,
             "analysis_audit": [p.mmpbsa / "audit.json"],
             "report": [p.result / "summary.json", p.result / "summary.csv"],
         }
@@ -187,12 +212,25 @@ class PeptidePipeline(DoneFileRunner):
     def cleanup_for_step(self, step: str) -> None:
         mapping = {
             "init": [self.paths.input, self.paths.manifest],
-            "prepare_input": [self.paths.input / "selected_protein.pdb"],
+            "prepare_input": [
+                self.paths.input / "selected.pdb",
+                self.paths.input / "selected_protein.pdb",
+                self.paths.input / "selected_receptor.pdb",
+                self.paths.input / "selected_peptide.pdb",
+            ],
             "amber_prepare": [self.paths.amber],
             "md_convert": [self.paths.gromacs, *self.replica_dirs()],
-            "analysis_prepare": [self.paths.mmpbsa / "md_prod_dry_center.xtc", self.paths.mmpbsa / "md_prod_dry_center.nc"],
+            "analysis_prepare": [self.paths.mmpbsa],
             "analysis_qc": [self.paths.qc, self.paths.structures],
-            "analysis_mmpbsa": list(self.paths.mmpbsa.glob("_MMPBSA_*")),
+            "analysis_mmpbsa": [
+                self.paths.mmpbsa / ".mmpbsa_skipped",
+                self.paths.mmpbsa / "mmpbsa_replicas.json",
+                self.paths.mmpbsa / "FINAL_RESULTS_MMPBSA.dat",
+                self.paths.mmpbsa / "FINAL_RESULTS_MMPBSA_SANITY.dat",
+                self.paths.mmpbsa / "per_frame_energy.csv",
+                *self.paths.mmpbsa.glob("_MMPBSA_*"),
+                *self.paths.mmpbsa.glob("rep*/_MMPBSA_*"),
+            ],
             "report": [self.paths.result],
         }
         remove_paths(mapping.get(step, []))
@@ -211,7 +249,7 @@ class PeptidePipeline(DoneFileRunner):
         source_pdb = self.context.resolve_path(row["selected_pdb"])
         if not source_pdb.exists():
             raise SystemExit(f"Missing selected PDB: {source_pdb}")
-        shutil.copy2(source_pdb, self.paths.input / "selected.pdb")
+        shutil.copy2(source_pdb, self.paths.input / "selected_raw.pdb")
         cofactor_files = self.copy_optional_inputs(row.get("receptor_cofactor_files"), "cofactors")
         cofactor_frcmods = self.copy_optional_inputs(row.get("receptor_cofactor_frcmods"), "cofactor_params")
         cofactor_libs = self.copy_optional_inputs(row.get("receptor_cofactor_libs"), "cofactor_params")
@@ -231,7 +269,9 @@ class PeptidePipeline(DoneFileRunner):
             "protocol_path": str(self.context.protocol_path),
             "profile": self.profile,
             "source_pdb": str(source_pdb),
+            "raw_input_pdb": str(self.paths.input / "selected_raw.pdb"),
             "input_pdb": str(self.paths.input / "selected.pdb"),
+            "clean_input_pdb": str(self.paths.input / "selected.pdb"),
             "receptor_chains": receptor_chains,
             "peptide_chains": ligand_chains,
             "receptor_cofactor_files": cofactor_files,
@@ -243,6 +283,12 @@ class PeptidePipeline(DoneFileRunner):
             "paper_dmm_pbsa_kJ_mol": optional_float(row.get("paper_dmm_pbsa_kJ_mol")),
             "paper_vdw_kJ_mol": optional_float(row.get("paper_vdw_kJ_mol")),
             "frame_settings": settings,
+            "replica_indices": replica_indices(self.profile),
+            "replicas": replica_names(self.profile),
+            "replica_seeds": replica_seed_map(self.profile),
+            "solvent_shape_initial": self.profile["system"].get("solvent_shape", "oct"),
+            "solvent_shape_actual": self.profile["system"].get("solvent_shape", "oct"),
+            "box_retry_used": False,
             "created_at": utc_now(),
             "runtime_overrides": {
                 "GPU_ID": os.environ.get("GPU_ID"),
@@ -284,8 +330,76 @@ class PeptidePipeline(DoneFileRunner):
         convert_to_gromacs(self.paths, self.profile)
 
     def step_md_em(self) -> None:
+        try:
+            self.run_all_em()
+        except EmUnstableError as exc:
+            if not self.box_retry_allowed():
+                raise
+            self.retry_md_em_with_box(self.box_retry_details(exc))
+
+    def run_all_em(self) -> None:
         for paths in self.replica_paths():
             run_em(paths, self.profile)
+
+    def box_retry_allowed(self) -> bool:
+        system = self.profile.get("system", {})
+        if not bool(system.get("allow_box_retry", False)):
+            return False
+        if str(system.get("solvent_shape", "oct")).lower() == "box":
+            return False
+        return not bool(self.manifest().get("box_retry_used", False))
+
+    def box_retry_details(self, exc: Exception) -> dict[str, Any]:
+        details: dict[str, Any] = {
+            "reason": str(exc),
+            "detected_at": utc_now(),
+            "failed_logs": [],
+        }
+        for log in sorted(self.paths.logs.glob("*mdrun_em.log")):
+            if not em_log_has_unstable_structure(log):
+                continue
+            rep_name = log.name.split("_", 1)[0] if "_" in log.name else self.paths.rep.name
+            atom_index = em_failure_atom_index(log)
+            overlaps: list[dict[str, Any]] = []
+            gro = self.paths.md / rep_name / "system_GMX.gro"
+            if atom_index is not None and gro.exists():
+                overlaps = find_gro_atom_overlaps(gro, atom_index)
+            details["failed_logs"].append(
+                {
+                    "replica": rep_name,
+                    "log": str(log),
+                    "max_force_atom_index": atom_index,
+                    "nearby_overlaps": overlaps,
+                }
+            )
+        return details
+
+    def retry_md_em_with_box(self, details: dict[str, Any]) -> None:
+        initial_shape = str(self.profile.get("system", {}).get("solvent_shape", "oct")).lower()
+        retry_profile = deepcopy(self.profile)
+        retry_profile.setdefault("system", {})
+        retry_profile["system"]["solvent_shape"] = "box"
+        retry_profile["system"]["allow_box_retry"] = False
+
+        manifest = self.manifest()
+        manifest.setdefault("solvent_shape_initial", initial_shape)
+        manifest["solvent_shape_actual"] = "box"
+        manifest["box_retry_used"] = True
+        manifest["box_retry_reason"] = details["reason"]
+        manifest["box_retry_details"] = details
+        manifest["profile"] = retry_profile
+        self.profile = retry_profile
+        self.write_manifest(manifest)
+        write_json_atomic(self.paths.logs / "box_retry.json", details)
+        write_text_atomic(self.paths.logs / "box_retry.log", f"{utc_now()}\nretry solvent_shape: {initial_shape} -> box\nreason: {details['reason']}\n")
+
+        remove_paths([self.paths.amber, self.paths.gromacs, *self.replica_dirs()])
+        self.ensure_dirs()
+        run_amber_prepare(self.paths, self.profile)
+        write_text_atomic(self.done_file("amber_prepare"), f"{utc_now()}\nbox_retry_rebuild=true\n")
+        convert_to_gromacs(self.paths, self.profile)
+        write_text_atomic(self.done_file("md_convert"), f"{utc_now()}\nbox_retry_rebuild=true\n")
+        self.run_all_em()
 
     def step_md_nvt(self) -> None:
         for paths in self.replica_paths():
@@ -300,7 +414,18 @@ class PeptidePipeline(DoneFileRunner):
             run_production(paths, self.profile)
 
     def step_analysis_prepare(self) -> None:
-        remove_paths([self.paths.mmpbsa / "md_prod_dry_center.xtc", self.paths.mmpbsa / "md_prod_dry_center.nc"])
+        remove_paths(
+            [
+                self.paths.mmpbsa / "md_prod_dry_center.xtc",
+                self.paths.mmpbsa / "md_prod_dry_center.nc",
+                self.paths.mmpbsa / "mmpbsa_replicas.json",
+                self.paths.mmpbsa / ".mmpbsa_skipped",
+                self.paths.mmpbsa / "FINAL_RESULTS_MMPBSA.dat",
+                self.paths.mmpbsa / "FINAL_RESULTS_MMPBSA_SANITY.dat",
+                self.paths.mmpbsa / "per_frame_energy.csv",
+                *[self.paths.mmpbsa / name for name in replica_names(self.profile)],
+            ]
+        )
         manifest = self.manifest()
         self.write_layout_and_mmpbsa_inputs(manifest)
         ligand_mask = manifest["peptide_residue_mask"]
@@ -339,6 +464,17 @@ class PeptidePipeline(DoneFileRunner):
                 self.paths.logs / f"trjconv_{rep_dir.name}_dry_center.log",
             )
         run_logged(mamba_command(self.profile, ["cpptraj", "-i", str(self.paths.mmpbsa / "convert_dry_xtc_to_nc.in")]), self.paths.logs / "cpptraj_dry_convert.log")
+        mmpbsa_manifest = {
+            "enabled": mmpbsa_enabled(self.profile),
+            "replica_count": replica_count(self.profile),
+            "replica_indices": replica_indices(self.profile),
+            "replicas": replica_names(self.profile),
+            "replica_seeds": replica_seed_map(self.profile),
+            "explicit_water_count": explicit_water_count(self.profile),
+        }
+        if mmpbsa_enabled(self.profile):
+            self.prepare_replica_mmpbsa_inputs(manifest)
+        write_json_atomic(self.paths.mmpbsa / "mmpbsa_manifest.json", mmpbsa_manifest)
 
     def write_layout_and_mmpbsa_inputs(self, manifest: dict[str, Any]) -> None:
         atoms_by_residue = residue_atoms(self.paths.amber / "complex_dry.pdb")
@@ -376,8 +512,29 @@ trajout {self.paths.mmpbsa / "md_prod_dry_center.nc"} netcdf
 run
 """,
         )
-        write_text_atomic(self.paths.mmpbsa / "mmpbsa_sanity.in", mmpbsa_input_text(manifest, self.profile, sanity=True))
-        write_text_atomic(self.paths.mmpbsa / "mmpbsa.in", mmpbsa_input_text(manifest, self.profile, sanity=False))
+    def prepare_replica_mmpbsa_inputs(self, manifest: dict[str, Any]) -> None:
+        receptor_first, _receptor_last = parse_simple_mask(str(manifest["receptor_residue_mask"]))
+        _peptide_first, peptide_last = parse_simple_mask(str(manifest["peptide_residue_mask"]))
+        settings = manifest["frame_settings"]
+        for rep_dir in self.replica_dirs():
+            out = self.paths.mmpbsa / rep_dir.name
+            out.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.paths.mmpbsa / "complex.prmtop", out / "complex.prmtop")
+            shutil.copy2(self.paths.mmpbsa / "receptor.prmtop", out / "receptor.prmtop")
+            shutil.copy2(self.paths.mmpbsa / "peptide.prmtop", out / "peptide.prmtop")
+            input_xtc = self.paths.mmpbsa / f"{rep_dir.name}_dry_center.xtc"
+            write_text_atomic(
+                out / "convert_dry_xtc_to_nc.in",
+                f"""parm {out / "complex.prmtop"}
+trajin {input_xtc} {settings["startframe"]} {settings["total_frames"]} {settings["interval"]}
+autoimage anchor {manifest["receptor_residue_mask"]} fixed :{receptor_first}-{peptide_last}
+trajout {out / "md_prod_dry_center.nc"} netcdf
+run
+""",
+            )
+            run_logged(mamba_command(self.profile, ["cpptraj", "-i", str(out / "convert_dry_xtc_to_nc.in")]), self.paths.logs / f"cpptraj_dry_convert_{rep_dir.name}.log")
+            write_text_atomic(out / "mmpbsa_sanity.in", mmpbsa_input_text(manifest, self.profile, sanity=True))
+            write_text_atomic(out / "mmpbsa.in", mmpbsa_input_text(manifest, self.profile, sanity=False))
 
     def run_trjconv(self, rep_dir: Path, index: Path, group: str, output: Path, log: Path) -> None:
         trjconv_script = (
@@ -530,56 +687,21 @@ color tv_red, chain B
                 remove_paths([temp_dir])
 
     def step_analysis_mmpbsa(self) -> None:
-        sanity_cmd = [
-            "MMPBSA.py",
-            "-O",
-            "-i",
-            "mmpbsa_sanity.in",
-            "-o",
-            "FINAL_RESULTS_MMPBSA_SANITY.dat",
-            "-cp",
-            "complex.prmtop",
-            "-rp",
-            "receptor.prmtop",
-            "-lp",
-            "peptide.prmtop",
-            "-y",
-            "md_prod_dry_center.nc",
-        ]
-        run_logged(mamba_command(self.profile, sanity_cmd), self.paths.logs / "mmpbsa_sanity.log", cwd=self.paths.mmpbsa)
+        if not mmpbsa_enabled(self.profile):
+            write_text_atomic(self.paths.mmpbsa / ".mmpbsa_skipped", "mmpbsa.enabled=false\n")
+            return
 
-        if bool(self.profile["mmpbsa"]["mpi"]):
-            cmd = [
-                "mpirun",
-                "-np",
-                str(int(self.profile["mmpbsa"]["np"])),
-                "MMPBSA.py.MPI",
-                "-O",
-                "-i",
-                "mmpbsa.in",
-                "-o",
-                "FINAL_RESULTS_MMPBSA.dat",
-                "-eo",
-                "per_frame_energy.csv",
-                "-cp",
-                "complex.prmtop",
-                "-rp",
-                "receptor.prmtop",
-                "-lp",
-                "peptide.prmtop",
-                "-y",
-                "md_prod_dry_center.nc",
-            ]
-        else:
-            cmd = [
+        replicas: list[dict[str, Any]] = []
+        seeds = replica_seed_map(self.profile)
+        for name in replica_names(self.profile):
+            rep_dir = self.paths.mmpbsa / name
+            sanity_cmd = [
                 "MMPBSA.py",
                 "-O",
                 "-i",
-                "mmpbsa.in",
+                "mmpbsa_sanity.in",
                 "-o",
-                "FINAL_RESULTS_MMPBSA.dat",
-                "-eo",
-                "per_frame_energy.csv",
+                "FINAL_RESULTS_MMPBSA_SANITY.dat",
                 "-cp",
                 "complex.prmtop",
                 "-rp",
@@ -589,25 +711,126 @@ color tv_red, chain B
                 "-y",
                 "md_prod_dry_center.nc",
             ]
-        env = {"PYTHONPATH": mpi_pythonpath(self.profile)}
-        run_logged(mamba_command(self.profile, cmd), self.paths.logs / "mmpbsa.log", cwd=self.paths.mmpbsa, env=env)
+            run_logged(mamba_command(self.profile, sanity_cmd), self.paths.logs / f"mmpbsa_sanity_{name}.log", cwd=rep_dir)
+
+            if bool(self.profile["mmpbsa"]["mpi"]):
+                cmd = [
+                    "mpirun",
+                    "-np",
+                    str(int(self.profile["mmpbsa"]["np"])),
+                    "MMPBSA.py.MPI",
+                    "-O",
+                    "-i",
+                    "mmpbsa.in",
+                    "-o",
+                    "FINAL_RESULTS_MMPBSA.dat",
+                    "-eo",
+                    "per_frame_energy.csv",
+                    "-cp",
+                    "complex.prmtop",
+                    "-rp",
+                    "receptor.prmtop",
+                    "-lp",
+                    "peptide.prmtop",
+                    "-y",
+                    "md_prod_dry_center.nc",
+                ]
+            else:
+                cmd = [
+                    "MMPBSA.py",
+                    "-O",
+                    "-i",
+                    "mmpbsa.in",
+                    "-o",
+                    "FINAL_RESULTS_MMPBSA.dat",
+                    "-eo",
+                    "per_frame_energy.csv",
+                    "-cp",
+                    "complex.prmtop",
+                    "-rp",
+                    "receptor.prmtop",
+                    "-lp",
+                    "peptide.prmtop",
+                    "-y",
+                    "md_prod_dry_center.nc",
+                ]
+            env = {"PYTHONPATH": mpi_pythonpath(self.profile)}
+            run_logged(mamba_command(self.profile, cmd), self.paths.logs / f"mmpbsa_{name}.log", cwd=rep_dir, env=env)
+            replicas.append(
+                {
+                    "replica": name,
+                    "replica_index": int(name.replace("rep", "")),
+                    "seed": seeds[name],
+                    "output": str(rep_dir / "FINAL_RESULTS_MMPBSA.dat"),
+                    "per_frame_energy": str(rep_dir / "per_frame_energy.csv"),
+                }
+            )
+        write_json_atomic(self.paths.mmpbsa / "mmpbsa_replicas.json", {"replicas": replicas})
 
     def step_analysis_audit(self) -> None:
-        parsed = parse_mmpbsa_full(self.paths.mmpbsa / "FINAL_RESULTS_MMPBSA.dat")
-        parsed["values"].update(parse_entropy_terms(self.paths.mmpbsa / "FINAL_RESULTS_MMPBSA.dat"))
-        add_pb_entropy_corrected(parsed["values"])
-        audit = audit_mmpbsa(
-            parsed,
-            int(self.profile["protocol"]["min_mmpbsa_frames"]),
-            float(self.profile["mmpbsa"]["internal_limit_kcal_mol"]),
-            float(self.profile["mmpbsa"]["internal_std_limit_kcal_mol"]),
-        )
-        audit["job_id"] = self.manifest()["job_id"]
-        audit["mmpbsa_output"] = str(self.paths.mmpbsa / "FINAL_RESULTS_MMPBSA.dat")
-        audit["values"] = parsed["values"]
+        manifest = self.manifest()
+        if not mmpbsa_enabled(self.profile):
+            audit = {
+                "status": "skipped",
+                "job_id": manifest["job_id"],
+                "frames": 0,
+                "min_frames": int(self.profile["protocol"]["min_mmpbsa_frames"]),
+                "replica_count": replica_count(self.profile),
+                "replica_indices": replica_indices(self.profile),
+                "replica_seeds": replica_seed_map(self.profile),
+                "issues": [],
+                "notes": ["MMPBSA skipped because mmpbsa.enabled=false."],
+                "values": {},
+                "replicas": [],
+            }
+            write_json_atomic(self.paths.mmpbsa / "audit.json", audit)
+            return
+
+        per_replica: list[dict[str, Any]] = []
+        min_frames = max(1, int(round(int(self.profile["protocol"]["min_mmpbsa_frames"]) / replica_count(self.profile))))
+        seeds = replica_seed_map(self.profile)
+        for name in replica_names(self.profile):
+            output = self.paths.mmpbsa / name / "FINAL_RESULTS_MMPBSA.dat"
+            parsed = parse_mmpbsa_full(output)
+            audit = audit_mmpbsa(
+                parsed,
+                min_frames,
+                float(self.profile["mmpbsa"]["internal_limit_kcal_mol"]),
+                float(self.profile["mmpbsa"]["internal_std_limit_kcal_mol"]),
+            )
+            entropy = parse_entropy_terms(output)
+            values = dict(parsed["values"])
+            values.update(entropy)
+            add_pb_entropy_corrected(values)
+            per_replica.append(
+                {
+                    "replica": name,
+                    "replica_index": int(name.replace("rep", "")),
+                    "seed": seeds[name],
+                    "audit": audit,
+                    "values": values,
+                    "frames": parsed["frames"],
+                    "output": str(output),
+                }
+            )
+        values = aggregate_replica_values([item["values"] for item in per_replica])
+        audit = {
+            "status": "invalid" if any(item["audit"]["status"] != "valid" for item in per_replica) else "valid",
+            "job_id": manifest["job_id"],
+            "frames": sum(float(item["frames"] or 0.0) for item in per_replica),
+            "min_frames": int(self.profile["protocol"]["min_mmpbsa_frames"]),
+            "replica_min_frames": min_frames,
+            "replica_count": replica_count(self.profile),
+            "replica_indices": replica_indices(self.profile),
+            "replica_seeds": seeds,
+            "issues": [issue | {"replica": item["replica"]} for item in per_replica for issue in item["audit"]["issues"]],
+            "notes": ["Replica MMPBSA values are averaged across independent runs."],
+            "values": values,
+            "replicas": per_replica,
+        }
         write_json_atomic(self.paths.mmpbsa / "audit.json", audit)
         if not bool(self.profile["mmpbsa"]["keep_tmp"]):
-            remove_paths(list(self.paths.mmpbsa.glob("_MMPBSA_*")))
+            remove_paths(list(self.paths.mmpbsa.glob("rep*/_MMPBSA_*")))
         if audit["status"] != "valid":
             raise RuntimeError("MMPBSA audit failed; see mmpbsa/audit.json")
 
@@ -615,8 +838,8 @@ color tv_red, chain B
         manifest = self.manifest()
         traj_qc = read_json(self.paths.qc / "summary.json")
         mmpbsa_audit = read_json(self.paths.mmpbsa / "audit.json")
-        parsed = parse_mmpbsa_full(self.paths.mmpbsa / "FINAL_RESULTS_MMPBSA.dat")
-        status = "valid" if traj_qc["status"] == "valid" and mmpbsa_audit["status"] == "valid" else "invalid"
+        mmpbsa_status = mmpbsa_audit["status"]
+        status = "valid" if traj_qc["status"] == "valid" and mmpbsa_status in {"valid", "skipped"} else "invalid"
         summary: dict[str, Any] = {
             "job_id": manifest["job_id"],
             "name": manifest["name"],
@@ -625,12 +848,19 @@ color tv_red, chain B
             "source": manifest.get("source", ""),
             "status": status,
             "trajectory_qc_status": traj_qc["status"],
-            "mmpbsa_qc_status": mmpbsa_audit["status"],
+            "mmpbsa_qc_status": mmpbsa_status,
             "mmpbsa_frames": mmpbsa_audit["frames"],
             "trajectory_frames": traj_qc["frames"],
             "replica_count": replica_count(self.profile),
+            "replica_indices": replica_indices(self.profile),
+            "replicas": replica_names(self.profile),
+            "replica_seeds": replica_seed_map(self.profile),
             "frames_per_replica": manifest.get("frame_settings", {}).get("frames_per_replica"),
             "mmpbsa_frames_total": mmpbsa_audit["frames"],
+            "solvent_shape_initial": manifest.get("solvent_shape_initial"),
+            "solvent_shape_actual": manifest.get("solvent_shape_actual"),
+            "box_retry_used": bool(manifest.get("box_retry_used", False)),
+            "box_retry_reason": manifest.get("box_retry_reason", ""),
             "replica_qc": traj_qc.get("replica_qc", []),
             "dielectric_source": manifest.get("dielectric_policy", {}).get("source"),
             "dielectric_class": manifest.get("dielectric_policy", {}).get("classification"),
@@ -638,12 +868,16 @@ color tv_red, chain B
             "explicit_water_count": explicit_water_count(self.profile),
             "entropy_enabled": entropy_enabled(self.profile),
             "entropy_method": str(self.profile.get("mmpbsa", {}).get("entropy", "none")),
+            "input_preparation": manifest.get("input_preparation", ""),
+            "dropped_nonprotein_residues": manifest.get("dropped_nonprotein_residues", []),
+            "dropped_nonprotein_residue_count": len(manifest.get("dropped_nonprotein_residues", [])),
+            "input_residue_findings": manifest.get("input_residue_findings", {}),
             "deltaG_exp_kJ_mol": manifest.get("experimental_deltaG_kJ_mol"),
             "paper_mm_pbsa_kJ_mol": manifest.get("paper_mm_pbsa_kJ_mol"),
             "paper_dmm_pbsa_kJ_mol": manifest.get("paper_dmm_pbsa_kJ_mol"),
             "paper_vdw_kJ_mol": manifest.get("paper_vdw_kJ_mol"),
         }
-        summary.update(mmpbsa_audit.get("values", parsed["values"]))
+        summary.update(mmpbsa_audit.get("values", {}))
         write_json_atomic(self.paths.result / "summary.json", summary)
         write_csv_atomic(self.paths.result / "summary.csv", [summary])
 
@@ -753,6 +987,7 @@ def peptide_replica_qc_summaries(
     per_replica = int(manifest.get("frame_settings", {}).get("frames_per_replica") or len(receptor_rows))
     summaries: list[dict[str, Any]] = []
     names = replica_names(profile)
+    seeds = replica_seed_map(profile)
     if not names:
         names = ["rep01"]
     for idx, name in enumerate(names):
@@ -768,6 +1003,8 @@ def peptide_replica_qc_summaries(
         contact_stats = column_stats(contact_header, contact_slice)
         summary: dict[str, Any] = {
             "replica": name,
+            "replica_index": int(name.replace("rep", "")),
+            "seed": seeds.get(name),
             "frames": len(rec_slice),
             "receptor_bb_rmsd_angstrom": receptor_stats,
             "peptide_bb_rmsd_after_receptor_fit_angstrom": peptide_stats,

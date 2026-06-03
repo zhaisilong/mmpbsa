@@ -14,7 +14,7 @@ system:
 
 amber_prep:
   recipe: protein_ligand_gaff2_tip3p
-  nonstandard_policy: strip
+  nonstandard_policy: fail
   default_ligand_param_mode: auto
   protein_ff: leaprc.protein.ff14SB
   ligand_ff: leaprc.gaff2

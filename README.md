@@ -147,20 +147,50 @@ Peptide profiles:
 
 - `configs/default_15ns.yaml`: compatibility default, 15 ns production.
 - `configs/peptide_crystal_3x5ns.yaml`: 3 independent 5 ns replicas.
+- `configs/peptide_crystal_3x15ns.yaml`: 3 independent 15 ns replicas for AF3/cofold/docked starts when GPU time is available.
+- `configs/peptide_crystal_1x15ns.yaml`: single-replica 15 ns template for targeted `repNN` reruns.
 - `configs/peptide_crystal_5x5ns.yaml`: optional 5-replica version.
 
 Ligand profiles:
 
 - `configs/ligand_crystal_3x5ns.yaml`: ligand crystal-start default, MMPBSA disabled.
 - `configs/ligand_crystal_5x5ns.yaml`: optional 5-replica version.
-- `configs/ligand_crystal_3x5ns_mmpbsa_bcc.yaml`: benchmark/test profile with MMPBSA enabled and AM1-BCC fallback charges.
+- `configs/ligand_crystal_3x5ns_mmpbsa_bcc.yaml`: local validation profile with MMPBSA enabled and AM1-BCC fallback charges.
 
 Peptide MMPBSA uses Amber ff14SB and `mbondi2`. Profiles may explicitly set
 `mmpbsa.epsilon` or `mmpbsa.dielectric`; otherwise the pipeline applies the
 charged/polar/nonpolar interface rule and records the selected value in the
-summary. Explicit interface water defaults to 0. Entropy is disabled by default;
-PB entropy-corrected output is available only for explicit sensitivity profiles
-and is not treated as a validated default score.
+summary. Crystal-start peptide profiles run MMPBSA separately for each
+independent replica and report the replica mean plus sample SD and SEM. Explicit
+interface water defaults to 0. Entropy is disabled by default; PB
+entropy-corrected output is available only for explicit sensitivity profiles and
+is not treated as a validated default score.
+
+Replica indices are stable. `rep01`, `rep02`, and `rep03` use seeds
+`seed_base+1`, `seed_base+2`, and `seed_base+3`. A single extra replica can be
+run and later merged:
+
+```bash
+mmpbsa peptide run RUN_DIR --job-id demo_peptide \
+  --protocol configs/peptide_crystal_1x15ns.yaml \
+  --replica-index 4 --resume
+
+mmpbsa peptide merge-replicas RUN_DIR/demo_peptide_merged \
+  RUN_DIR/demo_peptide_rep01 RUN_DIR/demo_peptide_rep04
+```
+
+Peptide input preparation is strict about HETATM records. New jobs keep the
+original selected structure as `input/selected_raw.pdb`; the Amber-facing
+`input/selected.pdb` and `input/selected_protein.pdb` are ATOM-only cleaned
+structures. The default peptide policy is `amber_prep.nonstandard_policy: fail`;
+set it to `strip` only when the HETATM records are known removable crystallization
+or buffer species. Dropped residues are recorded in the job manifest and
+`result/summary.json`.
+
+Peptide crystal profiles keep `solvent_shape: oct` as the first choice and can
+automatically retry with `solvent_shape: box` if EM detects a water-box overlap
+or non-finite force. The retry decision and actual solvent shape are recorded in
+the job manifest and summary.
 
 Ligand production defaults expect RESP-charged ligand input. Use AM1-BCC
 fallback profiles only when that approximation is intentional.
@@ -181,9 +211,20 @@ result/summary.csv
 .<step>_done
 ```
 
+Local validation scaffolding is kept outside the core package under
+`validation/`. It is for checking this repository's peptide/ligand behavior, not
+for the public pipeline API. Peptide validation summaries can be regenerated
+from existing outputs with:
+
+```bash
+python validation/peptide_3x5ns/report.py \
+  --run-dir pipeline_tests/peptide_3x5ns \
+  --output-dir results/peptide_3x5ns
+```
+
 ## Documentation
 
 - [Setup guide](docs/setups.md)
 - [Receptor cofactor guide](docs/receptor_cofactors.md)
-- [Implementation plan](docs/PLAN.md)
 - [Peptide local validation notes](docs/peptide_3x5ns_mmpbsa.md)
+- [TYK2 ligand validation report](docs/tyk2_ligand_benchmark.md)

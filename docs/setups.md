@@ -89,13 +89,18 @@ Core protocols:
   with MMPBSA over the final 10 ns.
 - `configs/peptide_crystal_3x5ns.yaml`: peptide crystal-start protocol with
   3 independent 5 ns replicas and per-replica stability QC.
+- `configs/peptide_crystal_3x15ns.yaml`: longer peptide crystal-start protocol
+  with 3 independent 15 ns replicas; intended for AF3/cofold/docked starts when
+  GPU time is available.
+- `configs/peptide_crystal_1x15ns.yaml`: single-replica 15 ns template for
+  explicit `--replica-index N` reruns.
 - `configs/peptide_crystal_5x5ns.yaml`: optional 5-replica peptide protocol.
 - `configs/ligand_crystal_3x5ns.yaml`: ligand crystal-start default, 3
   independent 5 ns replicas, explicit water MD, RESP input expected, MMPBSA
   disabled by default.
 - `configs/ligand_crystal_5x5ns.yaml`: optional 5-replica ligand protocol.
-- `configs/ligand_crystal_3x5ns_mmpbsa_bcc.yaml`: test profile with MMPBSA
-  enabled and AM1-BCC ligand charges.
+- `configs/ligand_crystal_3x5ns_mmpbsa_bcc.yaml`: local validation profile with
+  MMPBSA enabled and AM1-BCC ligand charges.
 - `configs/smoke_20ps.yaml`: short smoke settings for environment validation.
 
 Inspect frame selection:
@@ -103,6 +108,7 @@ Inspect frame selection:
 ```bash
 mmpbsa frame-settings --protocol configs/default_15ns.yaml
 mmpbsa frame-settings --protocol configs/peptide_crystal_3x5ns.yaml
+mmpbsa frame-settings --protocol configs/peptide_crystal_3x15ns.yaml
 ```
 
 ## Job Directory Template

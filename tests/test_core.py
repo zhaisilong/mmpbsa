@@ -6,17 +6,21 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mmpbsa.benchmark import assign_jobs_to_gpus, experimental_delta_g_kj_mol, linear_fit, load_sdf_records, pearson_r, spearman_r
-from mmpbsa.common import frame_settings, gmx_runtime, load_profile
+from mmpbsa.analysis import add_dmm
+from mmpbsa.common import aggregate_replica_values, frame_settings, gmx_runtime, load_profile, profile_with_replica_indices, replica_indices, replica_names, replica_seed_map
 from mmpbsa.ligand import ligand_input_format, mol2_total_charge, run_ligand_prepare
 from mmpbsa.ligand_amber import tleap_text
 from mmpbsa.ligand_pipeline import infer_dielectric_policy, ligand_replica_ante_mmpbsa_command, mmpbsa_input_text, select_interface_waters
-from mmpbsa.md import align_gro_to_top_molecule_order
+from mmpbsa.md import EmUnstableError, align_gro_to_top_molecule_order, find_gro_atom_overlaps, mdp_texts
 from mmpbsa.peptide_amber import prepare_input_structure as peptide_prepare_input_structure
 from mmpbsa.peptide_amber import tleap_text_with_cofactors as peptide_tleap_text_with_cofactors
+from mmpbsa.peptide_pipeline import PeptidePipeline
 from mmpbsa.peptide_pipeline import mmpbsa_input_text as peptide_mmpbsa_input_text
 from mmpbsa.peptide_pipeline import peptide_dielectric_policy
+from mmpbsa.metrics import linear_fit, pearson_r, spearman_r
+from mmpbsa.replica_merge import merge_peptide_replicas
 from mmpbsa.runner import DoneFileRunner, JobContext, discover_job_contexts
+from validation.ligand_tyk2.scaffold import assign_jobs_to_gpus, experimental_delta_g_kj_mol, load_sdf_records
 
 try:
     from click.testing import CliRunner
@@ -48,6 +52,20 @@ def make_context(job_dir: Path) -> JobContext:
         protocol_path=protocol_path,
         protocol=load_profile(protocol_path),
     )
+
+
+def peptide_pdb_with_hetatm() -> str:
+    return "\n".join(
+        [
+            "ATOM      1  N   GLY A   1       0.000   0.000   0.000  1.00  0.00           N",
+            "ATOM      2  CA  GLY A   1       1.000   0.000   0.000  1.00  0.00           C",
+            "HETATM    3  S   SO4 A 101       2.000   0.000   0.000  1.00  0.00           S",
+            "HETATM    4  O1  SO4 A 101       2.500   0.000   0.000  1.00  0.00           O",
+            "ATOM      5  N   ALA B   2       3.000   0.000   0.000  1.00  0.00           N",
+            "ATOM      6  CA  ALA B   2       4.000   0.000   0.000  1.00  0.00           C",
+            "END",
+        ]
+    ) + "\n"
 
 
 class FakeRunner(DoneFileRunner):
@@ -208,6 +226,31 @@ CL- 1
             self.assertEqual([line[5:10].strip() for line in atom_lines], ["SYS", "WAT", "WAT", "WAT", "NA+", "CL-"])
             self.assertEqual([int(line[15:20]) for line in atom_lines], [1, 2, 3, 4, 5, 6])
 
+    def test_find_gro_atom_overlaps_detects_triclinic_image(self) -> None:
+        def gro_atom(resid: int, resname: str, atom: str, serial: int, x: float, y: float, z: float) -> str:
+            return f"{resid:5d}{resname:<5s}{atom:>5s}{serial:5d}{x:8.3f}{y:8.3f}{z:8.3f}"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            gro = Path(tmp) / "overlap.gro"
+            gro.write_text(
+                "\n".join(
+                    [
+                        "triclinic overlap",
+                        "2",
+                        gro_atom(1, "WAT", "O", 1, 2.734, 4.364, 6.392),
+                        gro_atom(2, "WAT", "O", 2, 5.012, 1.127, 0.782),
+                        "    6.85862     6.46638     5.60004     0.00000     0.00000     2.28620     0.00000    -2.28620     3.23319",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            overlaps = find_gro_atom_overlaps(gro, 1, threshold_nm=0.08)
+            self.assertEqual(len(overlaps), 1)
+            self.assertAlmostEqual(overlaps[0]["distance_nm"], 0.01345, places=4)
+            self.assertEqual(overlaps[0]["target"]["atom"], "O")
+            self.assertEqual(overlaps[0]["neighbor"]["serial"], 2)
+
     def test_frame_settings_default_protocol(self) -> None:
         settings = frame_settings(load_profile(ROOT / "configs" / "default_15ns.yaml"))
         self.assertEqual(settings["startframe"], 251)
@@ -232,6 +275,116 @@ CL- 1
         self.assertEqual(settings["replica_count"], 3)
         self.assertEqual(settings["expected_mmpbsa_frames"], 303)
 
+    def test_frame_settings_peptide_crystal_3x15ns_replicas(self) -> None:
+        profile = load_profile(ROOT / "configs" / "peptide_crystal_3x15ns.yaml")
+        settings = frame_settings(profile)
+        self.assertEqual(settings["startframe"], 251)
+        self.assertEqual(settings["interval"], 1)
+        self.assertEqual(settings["total_frames"], 751)
+        self.assertEqual(settings["frames_per_replica"], 501)
+        self.assertEqual(settings["replica_count"], 3)
+        self.assertEqual(settings["replica_indices"], [1, 2, 3])
+        self.assertEqual(settings["replica_names"], ["rep01", "rep02", "rep03"])
+        self.assertEqual(settings["expected_mmpbsa_frames"], 1503)
+        self.assertEqual(profile["protocol"]["min_mmpbsa_frames"], 1500)
+
+    def test_replica_index_override_keeps_global_seed(self) -> None:
+        profile = load_profile(ROOT / "configs" / "peptide_crystal_3x15ns.yaml")
+        single = profile_with_replica_indices(profile, [4], scale_min_frames=True)
+        self.assertEqual(replica_indices(single), [4])
+        self.assertEqual(replica_names(single), ["rep04"])
+        self.assertEqual(single["protocol"]["min_mmpbsa_frames"], 500)
+        self.assertEqual(replica_seed_map(single), {"rep04": 2026052405})
+        nvt = mdp_texts(single, replica_index=replica_indices(single)[0])["nvt.mdp"]
+        self.assertIn("gen-seed                = 2026052405", nvt)
+
+    def test_aggregate_replica_values(self) -> None:
+        values = aggregate_replica_values(
+            [
+                {"GB_delta_total_kcal_mol": -10.0, "only_first": 1.0},
+                {"GB_delta_total_kcal_mol": -13.0, "only_second": 2.0},
+                {"GB_delta_total_kcal_mol": -16.0, "only_third": 3.0},
+            ]
+        )
+        self.assertEqual(
+            set(values),
+            {"GB_delta_total_kcal_mol", "GB_delta_total_kcal_mol_replica_sd", "GB_delta_total_kcal_mol_replica_sem"},
+        )
+        self.assertAlmostEqual(values["GB_delta_total_kcal_mol"], -13.0)
+        self.assertAlmostEqual(values["GB_delta_total_kcal_mol_replica_sd"], 3.0)
+        self.assertAlmostEqual(values["GB_delta_total_kcal_mol_replica_sem"], 3.0**0.5)
+
+    def test_merge_peptide_replicas_aggregates_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_a = self.write_replica_source(root, "job_rep01", "rep01", 2026052402, -10.0)
+            source_b = self.write_replica_source(root, "job_rep04", "rep04", 2026052405, -16.0)
+            output = root / "merged"
+
+            report = merge_peptide_replicas(output, [source_a, source_b])
+
+            self.assertEqual(report["replica_indices"], [1, 4])
+            summary = json.loads((output / "result" / "summary.json").read_text(encoding="utf-8"))
+            audit = json.loads((output / "analysis" / "mmpbsa" / "audit.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["replica_count"], 2)
+            self.assertEqual(summary["replica_seeds"], {"rep01": 2026052402, "rep04": 2026052405})
+            self.assertAlmostEqual(summary["GB_delta_total_kJ_mol"], -13.0)
+            self.assertAlmostEqual(summary["GB_delta_total_kJ_mol_replica_sd"], 3.0 * 2**0.5)
+            self.assertAlmostEqual(summary["GB_delta_total_kJ_mol_replica_sem"], 3.0)
+            self.assertEqual(audit["replica_min_frames"], 500)
+            self.assertEqual(audit["min_frames"], 1000)
+
+    def test_merge_peptide_replicas_rejects_duplicate_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_a = self.write_replica_source(root, "job_a", "rep02", 2026052403, -10.0)
+            source_b = self.write_replica_source(root, "job_b", "rep02", 2026052403, -16.0)
+            with self.assertRaises(SystemExit):
+                merge_peptide_replicas(root / "merged", [source_a, source_b])
+
+    def write_replica_source(self, root: Path, job_id: str, replica: str, seed: int, value: float) -> Path:
+        job_dir = root / job_id
+        (job_dir / "analysis" / "mmpbsa").mkdir(parents=True)
+        (job_dir / "result").mkdir()
+        index = int(replica.replace("rep", ""))
+        audit = {
+            "status": "valid",
+            "job_id": job_id,
+            "frames": 501,
+            "replicas": [
+                {
+                    "replica": replica,
+                    "replica_index": index,
+                    "seed": seed,
+                    "audit": {"status": "valid", "min_frames": 500, "issues": []},
+                    "values": {"GB_delta_total_kJ_mol": value, "PB_delta_total_kJ_mol": value * 2.0},
+                    "frames": 501,
+                }
+            ],
+        }
+        summary = {"job_id": job_id, "name": job_id, "status": "valid", "frames_per_replica": 501}
+        (job_dir / "analysis" / "mmpbsa" / "audit.json").write_text(json.dumps(audit), encoding="utf-8")
+        (job_dir / "result" / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+        return job_dir
+
+    def test_add_dmm_writes_new_names_and_compat_aliases(self) -> None:
+        values = {
+            "GB_vdw_kcal_mol": -10.0,
+            "GB_electrostatic_kcal_mol": -20.0,
+            "GB_polar_solvation_kcal_mol": 15.0,
+            "GB_nonpolar_solvation_kcal_mol": -1.0,
+            "PB_vdw_kcal_mol": -11.0,
+            "PB_electrostatic_kcal_mol": -12.0,
+            "PB_polar_solvation_kcal_mol": 10.0,
+            "PB_nonpolar_solvation_kcal_mol": -2.0,
+            "PB_dispersion_kcal_mol": 3.0,
+        }
+        add_dmm(values)
+        self.assertAlmostEqual(values["GB_dMM_kcal_mol"], -12.0)
+        self.assertAlmostEqual(values["GB_dmm_like_kcal_mol"], values["GB_dMM_kcal_mol"])
+        self.assertAlmostEqual(values["PB_dMM_kcal_mol"], -10.4)
+        self.assertAlmostEqual(values["PB_dmm_like_kcal_mol"], values["PB_dMM_kcal_mol"])
+
     def test_protocol_mmpbsa_rank_defaults(self) -> None:
         normal_protocols = [
             "default_15ns.yaml",
@@ -239,7 +392,9 @@ CL- 1
             "ligand_crystal_3x5ns.yaml",
             "ligand_crystal_3x5ns_mmpbsa_bcc.yaml",
             "ligand_crystal_5x5ns.yaml",
+            "peptide_crystal_1x15ns.yaml",
             "peptide_crystal_3x5ns.yaml",
+            "peptide_crystal_3x15ns.yaml",
             "peptide_crystal_5x5ns.yaml",
         ]
         for name in normal_protocols:
@@ -437,6 +592,64 @@ CL- 1
         self.assertIn("entropy=1", text)
         self.assertIn("&nmode", text)
 
+    def test_peptide_pipeline_requires_replica_mmpbsa_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = make_job(Path(tmp), "pep")
+            context = JobContext(
+                job_id="pep",
+                job_dir=job_dir,
+                config_path=job_dir / "pep.json",
+                config={"job_id": "pep"},
+                protocol_path=ROOT / "configs" / "peptide_crystal_3x5ns.yaml",
+                protocol=load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml"),
+            )
+            pipeline = PeptidePipeline(context)
+            analysis_prepare = {path.relative_to(job_dir).as_posix() for path in pipeline.required_outputs("analysis_prepare")}
+            self.assertIn("analysis/mmpbsa/rep01/mmpbsa.in", analysis_prepare)
+            self.assertIn("analysis/mmpbsa/rep02/md_prod_dry_center.nc", analysis_prepare)
+            self.assertIn("analysis/mmpbsa/rep03/peptide.prmtop", analysis_prepare)
+            self.assertNotIn("analysis/mmpbsa/mmpbsa.in", analysis_prepare)
+            analysis_mmpbsa = {path.relative_to(job_dir).as_posix() for path in pipeline.required_outputs("analysis_mmpbsa")}
+            self.assertEqual(analysis_mmpbsa, {"analysis/mmpbsa/mmpbsa_replicas.json"})
+
+    def test_peptide_md_em_retries_with_box_on_unstable_em(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = make_job(Path(tmp), "pep")
+            profile = json.loads(json.dumps(load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml")))
+            profile["system"]["allow_box_retry"] = True
+            context = JobContext(
+                job_id="pep",
+                job_dir=job_dir,
+                config_path=job_dir / "pep.json",
+                config={"job_id": "pep"},
+                protocol_path=ROOT / "configs" / "peptide_crystal_3x5ns.yaml",
+                protocol=profile,
+            )
+            pipeline = PeptidePipeline(context)
+            pipeline.ensure_dirs()
+            pipeline.write_manifest(
+                {
+                    "job_id": "pep",
+                    "profile": profile,
+                    "solvent_shape_initial": "oct",
+                    "solvent_shape_actual": "oct",
+                    "box_retry_used": False,
+                }
+            )
+            with (
+                patch("mmpbsa.peptide_pipeline.run_em", side_effect=[EmUnstableError("unstable EM"), None, None, None]) as run_em_mock,
+                patch("mmpbsa.peptide_pipeline.run_amber_prepare") as amber_mock,
+                patch("mmpbsa.peptide_pipeline.convert_to_gromacs") as convert_mock,
+            ):
+                pipeline.step_md_em()
+            manifest = json.loads((job_dir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(run_em_mock.call_count, 4)
+            amber_mock.assert_called_once()
+            convert_mock.assert_called_once()
+            self.assertTrue(manifest["box_retry_used"])
+            self.assertEqual(manifest["solvent_shape_actual"], "box")
+            self.assertEqual(pipeline.profile["system"]["solvent_shape"], "box")
+
     def test_peptide_receptor_cofactor_masks_and_tleap(self) -> None:
         profile = load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml")
         with tempfile.TemporaryDirectory() as tmp:
@@ -485,6 +698,42 @@ CL- 1
         self.assertIn("mol = combine { rec cof1 pep }", text)
         self.assertIn("addIonsRand mol Na+ 2", text)
 
+    def test_peptide_hetatm_fails_by_default(self) -> None:
+        profile = json.loads(json.dumps(load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml")))
+        profile["amber_prep"]["nonstandard_policy"] = "fail"
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "input"
+            input_dir.mkdir()
+            (input_dir / "selected_raw.pdb").write_text(peptide_pdb_with_hetatm(), encoding="utf-8")
+            paths = type("Paths", (), {"input": input_dir})()
+            manifest = {"receptor_chains": "A", "peptide_chains": "B"}
+
+            with self.assertRaises(SystemExit) as raised:
+                peptide_prepare_input_structure(paths, manifest, profile)
+
+            self.assertIn("HETATM residues", str(raised.exception))
+
+    def test_peptide_hetatm_strip_writes_clean_input_and_records_drops(self) -> None:
+        profile = json.loads(json.dumps(load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml")))
+        profile["amber_prep"]["nonstandard_policy"] = "strip"
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "input"
+            input_dir.mkdir()
+            (input_dir / "selected_raw.pdb").write_text(peptide_pdb_with_hetatm(), encoding="utf-8")
+            paths = type("Paths", (), {"input": input_dir})()
+            manifest = {"receptor_chains": "A", "peptide_chains": "B"}
+
+            prepared = peptide_prepare_input_structure(paths, manifest, profile)
+
+            clean = (input_dir / "selected.pdb").read_text(encoding="utf-8")
+            self.assertNotIn("HETATM", clean)
+            self.assertIn("ATOM", clean)
+            self.assertEqual(prepared["dropped_nonprotein_residue_count"], 1)
+            self.assertEqual(prepared["dropped_nonprotein_residues"][0]["resname"], "SO4")
+            self.assertTrue((input_dir / "selected_protein.pdb").exists())
+            self.assertTrue((input_dir / "selected_receptor.pdb").exists())
+            self.assertTrue((input_dir / "selected_peptide.pdb").exists())
+
     def test_cli_help(self) -> None:
         if not CLICK_AVAILABLE:
             self.skipTest("click is not installed in this Python environment")
@@ -492,7 +741,13 @@ CL- 1
         self.assertEqual(result.exit_code, 0)
         self.assertIn("peptide", result.output)
         self.assertIn("ligand", result.output)
-        self.assertIn("benchmark", result.output)
+        self.assertNotIn("benchmark", result.output)
+        peptide_help = CliRunner().invoke(cli, ["peptide", "--help"])
+        self.assertEqual(peptide_help.exit_code, 0)
+        self.assertIn("merge-replicas", peptide_help.output)
+        peptide_run_help = CliRunner().invoke(cli, ["peptide", "run", "--help"])
+        self.assertEqual(peptide_run_help.exit_code, 0)
+        self.assertIn("--replica-index", peptide_run_help.output)
 
     def test_doctor_applies_runtime_environment_overrides(self) -> None:
         if not CLICK_AVAILABLE:
@@ -512,7 +767,7 @@ CL- 1
         self.assertIn(["mamba", "run", "-n", "custom_md", "which", "MMPBSA.py"], commands)
         self.assertIn(["bash", "-lc", "source '/opt/gromacs/bin/GMXRC' && which 'gmx_custom'"], commands)
 
-    def test_benchmark_sdf_split_and_delta_g(self) -> None:
+    def test_validation_sdf_split_and_delta_g(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             sdf = Path(tmp) / "ligands.sdf"
             sdf.write_text(
@@ -538,7 +793,7 @@ $$$$
         self.assertAlmostEqual(experimental_delta_g_kj_mol(1.0, "uM"), -34.248, places=3)
         self.assertAlmostEqual(experimental_delta_g_kj_mol(1000.0, "nM"), -34.248, places=3)
 
-    def test_benchmark_correlation_helpers_and_gpu_assignment(self) -> None:
+    def test_validation_correlation_helpers_and_gpu_assignment(self) -> None:
         slope, intercept = linear_fit([1.0, 2.0, 3.0], [2.0, 4.0, 6.0])
         self.assertAlmostEqual(slope, 2.0)
         self.assertAlmostEqual(intercept, 0.0)

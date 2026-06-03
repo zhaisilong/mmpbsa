@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import itertools
+import math
+import re
 import shutil
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from .common import bash_gmx_command, mamba_command, replica_count, replica_names, run_logged, write_text_atomic
+from .common import bash_gmx_command, mamba_command, replica_count, replica_indices, replica_names, run_logged, write_text_atomic
+
+EM_UNSTABLE_MARKERS = [
+    "force on at least one atom is not finite",
+    "Maximum force     =            inf",
+]
+
+
+class EmUnstableError(RuntimeError):
+    pass
 
 
 def convert_to_gromacs(paths: Any, profile: dict[str, Any]) -> None:
@@ -30,7 +42,7 @@ def convert_to_gromacs(paths: Any, profile: dict[str, Any]) -> None:
     if not acpype_dir.exists():
         raise RuntimeError(f"ACPYPE did not create {acpype_dir}")
     align_gro_to_top_molecule_order(acpype_dir / "system_GMX.gro", acpype_dir / "system_GMX.top")
-    for idx, replica in enumerate(replica_names(profile), start=1):
+    for idx, replica in zip(replica_indices(profile), replica_names(profile)):
         rep = paths.md / replica
         rep.mkdir(parents=True, exist_ok=True)
         for source in acpype_dir.iterdir():
@@ -280,10 +292,107 @@ nstlog                  = 1000
 
 
 def validate_em_log(log: Any) -> None:
-    text = log.read_text(encoding="utf-8", errors="replace")
-    bad_markers = [
-        "force on at least one atom is not finite",
-        "Maximum force     =            inf",
-    ]
-    if any(marker in text for marker in bad_markers):
-        raise RuntimeError(f"Energy minimization did not produce a stable structure; see {log}")
+    if em_log_has_unstable_structure(log):
+        raise EmUnstableError(f"Energy minimization did not produce a stable structure; see {log}")
+
+
+def em_log_has_unstable_structure(log: Any) -> bool:
+    text = Path(log).read_text(encoding="utf-8", errors="replace")
+    return any(marker in text for marker in EM_UNSTABLE_MARKERS)
+
+
+def em_failure_atom_index(log: Any) -> int | None:
+    text = Path(log).read_text(encoding="utf-8", errors="replace")
+    match = re.search(r"Maximum force\s+=\s+\S+\s+on atom\s+(\d+)", text)
+    return int(match.group(1)) if match else None
+
+
+def find_gro_atom_overlaps(gro_path: Path, atom_index: int, threshold_nm: float = 0.08, max_pairs: int = 10) -> list[dict[str, Any]]:
+    atoms, box_vectors = parse_gro_atoms(gro_path)
+    if atom_index < 1 or atom_index > len(atoms):
+        return []
+    target = atoms[atom_index - 1]
+    overlaps: list[dict[str, Any]] = []
+    for atom in atoms:
+        if atom["index"] == target["index"] or atom["resnr"] == target["resnr"]:
+            continue
+        distance = triclinic_minimum_distance(target["coord"], atom["coord"], box_vectors)
+        if distance <= threshold_nm:
+            overlaps.append(
+                {
+                    "distance_nm": distance,
+                    "target": gro_atom_summary(target),
+                    "neighbor": gro_atom_summary(atom),
+                }
+            )
+    overlaps.sort(key=lambda item: float(item["distance_nm"]))
+    return overlaps[:max_pairs]
+
+
+def parse_gro_atoms(gro_path: Path) -> tuple[list[dict[str, Any]], tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]]:
+    lines = gro_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    if len(lines) < 3:
+        raise ValueError(f"Invalid GRO file: {gro_path}")
+    atom_count = int(lines[1].strip())
+    atom_lines = lines[2 : 2 + atom_count]
+    box_values = [float(value) for value in lines[2 + atom_count].split()]
+    atoms: list[dict[str, Any]] = []
+    for index, line in enumerate(atom_lines, start=1):
+        atoms.append(
+            {
+                "index": index,
+                "resnr": int(line[0:5]),
+                "resname": line[5:10].strip(),
+                "atom": line[10:15].strip(),
+                "serial": int(line[15:20]),
+                "coord": (float(line[20:28]), float(line[28:36]), float(line[36:44])),
+            }
+        )
+    return atoms, gro_box_vectors(box_values)
+
+
+def gro_box_vectors(values: list[float]) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    if len(values) == 3:
+        return (values[0], 0.0, 0.0), (0.0, values[1], 0.0), (0.0, 0.0, values[2])
+    if len(values) != 9:
+        raise ValueError(f"Unsupported GRO box vector length: {len(values)}")
+    return (values[0], values[3], values[4]), (values[5], values[1], values[6]), (values[7], values[8], values[2])
+
+
+def triclinic_minimum_distance(
+    coord_a: tuple[float, float, float],
+    coord_b: tuple[float, float, float],
+    box_vectors: tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]],
+) -> float:
+    delta = vector_sub(coord_a, coord_b)
+    best = vector_norm(delta)
+    for shift in itertools.product((-1, 0, 1), repeat=3):
+        image = vector_add(vector_add(vector_add(delta, vector_mul(shift[0], box_vectors[0])), vector_mul(shift[1], box_vectors[1])), vector_mul(shift[2], box_vectors[2]))
+        best = min(best, vector_norm(image))
+    return best
+
+
+def vector_add(left: tuple[float, float, float], right: tuple[float, float, float]) -> tuple[float, float, float]:
+    return left[0] + right[0], left[1] + right[1], left[2] + right[2]
+
+
+def vector_sub(left: tuple[float, float, float], right: tuple[float, float, float]) -> tuple[float, float, float]:
+    return left[0] - right[0], left[1] - right[1], left[2] - right[2]
+
+
+def vector_mul(scale: int, vector: tuple[float, float, float]) -> tuple[float, float, float]:
+    return scale * vector[0], scale * vector[1], scale * vector[2]
+
+
+def vector_norm(vector: tuple[float, float, float]) -> float:
+    return math.sqrt(vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2])
+
+
+def gro_atom_summary(atom: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "index": atom["index"],
+        "serial": atom["serial"],
+        "resnr": atom["resnr"],
+        "resname": atom["resname"],
+        "atom": atom["atom"],
+    }

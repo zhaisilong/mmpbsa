@@ -23,7 +23,6 @@ except ModuleNotFoundError:  # Keep the CLI usable with system python.
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROFILE = ROOT / "configs" / "default_15ns.yaml"
 DEFAULT_LIGAND_PROFILE = ROOT / "configs" / "ligand_crystal_3x5ns.yaml"
-DEFAULT_LIGAND_BENCHMARK_PROFILE = ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml"
 WATER_NAMES = {"HOH", "WAT", "H2O", "TIP3", "SOL"}
 ENV_VAR_PATTERN = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
 
@@ -329,7 +328,7 @@ def flatten_atom_range(atoms_by_residue: dict[int, list[int]], first: int, last:
     return atoms
 
 
-def frame_settings(profile: dict[str, Any]) -> dict[str, int]:
+def frame_settings(profile: dict[str, Any]) -> dict[str, Any]:
     protocol = profile["protocol"]
     replicas = replica_count(profile)
     xtc_interval_ps = float(protocol["xtc_interval_ps"])
@@ -346,17 +345,60 @@ def frame_settings(profile: dict[str, Any]) -> dict[str, int]:
         "interval": interval,
         "total_frames": total_frames,
         "replica_count": replicas,
+        "replica_indices": replica_indices(profile),
+        "replica_names": replica_names(profile),
         "frames_per_replica": per_replica,
         "expected_mmpbsa_frames": expected,
     }
 
 
 def replica_count(profile: dict[str, Any]) -> int:
-    return max(1, int(profile.get("protocol", {}).get("replica_count", 1)))
+    return len(replica_indices(profile))
+
+
+def replica_indices(profile: dict[str, Any]) -> list[int]:
+    protocol = profile.get("protocol", {})
+    raw = protocol.get("replica_indices")
+    if raw not in (None, ""):
+        if isinstance(raw, (list, tuple)):
+            indices = [int(item) for item in raw]
+        else:
+            text = str(raw).strip().strip("[]")
+            indices = [int(item.strip()) for item in re.split(r"[,\s]+", text) if item.strip()]
+    else:
+        count = max(1, int(protocol.get("replica_count", 1)))
+        indices = list(range(1, count + 1))
+    if not indices:
+        raise SystemExit("protocol.replica_indices must contain at least one replica index")
+    if any(index <= 0 for index in indices):
+        raise SystemExit(f"protocol.replica_indices must be positive integers: {indices}")
+    if len(set(indices)) != len(indices):
+        raise SystemExit(f"protocol.replica_indices contains duplicates: {indices}")
+    return indices
 
 
 def replica_names(profile: dict[str, Any]) -> list[str]:
-    return [f"rep{idx:02d}" for idx in range(1, replica_count(profile) + 1)]
+    return [f"rep{idx:02d}" for idx in replica_indices(profile)]
+
+
+def replica_seed_map(profile: dict[str, Any]) -> dict[str, int]:
+    seed_base = int(profile["md"]["seed_base"])
+    return {f"rep{idx:02d}": seed_base + idx for idx in replica_indices(profile)}
+
+
+def profile_with_replica_indices(profile: dict[str, Any], indices: list[int], scale_min_frames: bool = False) -> dict[str, Any]:
+    if not indices:
+        raise SystemExit("At least one replica index is required")
+    current_count = replica_count(profile)
+    copied = json.loads(json.dumps(profile))
+    protocol = copied.setdefault("protocol", {})
+    if scale_min_frames:
+        current_min = int(protocol["min_mmpbsa_frames"])
+        per_replica_min = max(1, int(round(current_min / current_count)))
+        protocol["min_mmpbsa_frames"] = per_replica_min * len(indices)
+    protocol["replica_indices"] = list(indices)
+    protocol["replica_count"] = len(indices)
+    return copied
 
 
 def mmpbsa_enabled(profile: dict[str, Any]) -> bool:
@@ -365,6 +407,23 @@ def mmpbsa_enabled(profile: dict[str, Any]) -> bool:
 
 def explicit_water_count(profile: dict[str, Any]) -> int:
     return max(0, int(profile.get("mmpbsa", {}).get("explicit_water_count", 0)))
+
+
+def aggregate_replica_values(values_by_replica: list[dict[str, float]]) -> dict[str, float]:
+    if not values_by_replica:
+        return {}
+    keys = sorted(set.intersection(*(set(values) for values in values_by_replica)))
+    aggregated: dict[str, float] = {}
+    for key in keys:
+        vals = [float(values[key]) for values in values_by_replica]
+        mean = sum(vals) / len(vals)
+        aggregated[key] = mean
+        if len(vals) > 1:
+            variance = sum((value - mean) ** 2 for value in vals) / (len(vals) - 1)
+            sd = math.sqrt(variance)
+            aggregated[f"{key}_replica_sd"] = sd
+            aggregated[f"{key}_replica_sem"] = sd / math.sqrt(len(vals))
+    return aggregated
 
 
 def write_json_atomic(path: Path, data: Any) -> None:

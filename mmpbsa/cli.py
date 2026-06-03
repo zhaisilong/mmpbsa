@@ -2,23 +2,17 @@ from __future__ import annotations
 
 import json
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 from typing import Type
 
 import click
 
 from .aggregate import aggregate_run_dir
-from .benchmark import (
-    DEFAULT_TYK2_LIGANDS,
-    make_ligand_jobs,
-    parse_csv_option,
-    parse_gpu_list,
-    run_ligand_jobs,
-    write_benchmark_report,
-)
-from .common import DEFAULT_LIGAND_BENCHMARK_PROFILE, DEFAULT_LIGAND_PROFILE, DEFAULT_PROFILE, frame_settings, gmx_runtime, load_profile, mpi_pythonpath, shlex_quote
+from .common import DEFAULT_LIGAND_PROFILE, DEFAULT_PROFILE, frame_settings, gmx_runtime, load_profile, mpi_pythonpath, profile_with_replica_indices, shlex_quote
 from .ligand_pipeline import LigandPipeline
 from .peptide_pipeline import PeptidePipeline
+from .replica_merge import merge_peptide_replicas
 from .runner import DoneFileRunner, apply_env_overrides, discover_job_contexts
 
 
@@ -46,36 +40,6 @@ def ligand_protocol_option(function):
     return protocol_option(function, default=DEFAULT_LIGAND_PROFILE)
 
 
-def ligand_benchmark_protocol_option(function):
-    return protocol_option(function, default=DEFAULT_LIGAND_BENCHMARK_PROFILE)
-
-
-def legacy_protocol_option(function):
-    return click.option(
-        "--protocol",
-        "protocol_path",
-        type=click.Path(path_type=Path, dir_okay=False),
-        default=DEFAULT_PROFILE,
-        show_default=True,
-        help="YAML protocol file with MD/MMPBSA settings and runtime paths.",
-    )(function)
-
-
-def run_options(function):
-    function = click.option("--force", is_flag=True, help="Clear selected mode and downstream done files/outputs before running.")(function)
-    function = click.option("--resume", is_flag=True, help="Skip steps that already have .<step>_done.")(function)
-    function = click.option(
-        "--mode",
-        type=click.Choice(["full", "prepare", "md", "analysis", "report"]),
-        default="full",
-        show_default=True,
-        help="Stage group to run.",
-    )(function)
-    function = click.option("--job-id", help="Run only RUN_DIR/<job-id>/<job-id>.json.")(function)
-    function = legacy_protocol_option(function)
-    return function
-
-
 def run_pipeline(
     pipeline_cls: Type[DoneFileRunner],
     run_dir: Path,
@@ -84,9 +48,12 @@ def run_pipeline(
     mode: str,
     resume: bool,
     force: bool,
+    replica_index: int | None = None,
 ) -> None:
     contexts = discover_job_contexts(run_dir, protocol_path, job_id=job_id)
     for context in contexts:
+        if replica_index is not None:
+            context = replace(context, protocol=profile_with_replica_indices(context.protocol, [replica_index], scale_min_frames=True))
         pipeline_cls(context).run(mode=mode, resume=resume, force=force)
 
 
@@ -106,9 +73,19 @@ def peptide() -> None:
 @click.option("--resume", is_flag=True, help="Skip steps that already have .<step>_done.")
 @click.option("--mode", type=click.Choice(["full", "prepare", "md", "analysis", "report"]), default="full", show_default=True, help="Stage group to run.")
 @click.option("--job-id", help="Run only RUN_DIR/<job-id>/<job-id>.json.")
+@click.option("--replica-index", type=click.IntRange(1), help="Run one explicit replica index, for example 4 creates rep04 with seed_base+4.")
 @peptide_protocol_option
-def peptide_run(run_dir: Path, protocol_path: Path, job_id: str | None, mode: str, resume: bool, force: bool) -> None:
-    run_pipeline(PeptidePipeline, run_dir, protocol_path, job_id, mode, resume, force)
+def peptide_run(run_dir: Path, protocol_path: Path, job_id: str | None, replica_index: int | None, mode: str, resume: bool, force: bool) -> None:
+    run_pipeline(PeptidePipeline, run_dir, protocol_path, job_id, mode, resume, force, replica_index=replica_index)
+
+
+@peptide.command("merge-replicas")
+@click.argument("output_job_dir", type=click.Path(path_type=Path, file_okay=False))
+@click.argument("source_job_dirs", nargs=-1, type=click.Path(path_type=Path, file_okay=False))
+@click.option("--force", is_flag=True, help="Overwrite merged audit/summary outputs if they already exist.")
+def peptide_merge_replicas(output_job_dir: Path, source_job_dirs: tuple[Path, ...], force: bool) -> None:
+    report = merge_peptide_replicas(output_job_dir, list(source_job_dirs), force=force)
+    click.echo(json.dumps(report, indent=2))
 
 
 @cli.group()
@@ -159,55 +136,6 @@ def aggregate(run_dir: Path, output_dir: Path) -> None:
     if not run_dir.exists():
         raise click.ClickException(f"RUN_DIR does not exist: {run_dir.resolve()}")
     report = aggregate_run_dir(run_dir, output_dir)
-    click.echo(json.dumps(report, indent=2))
-
-
-@cli.group()
-def benchmark() -> None:
-    """Benchmark data preparation, parallel runs, and reports."""
-
-
-@benchmark.command("make-ligand-jobs")
-@click.argument("resources_dir", type=click.Path(path_type=Path, file_okay=False))
-@click.argument("run_dir", type=click.Path(path_type=Path, file_okay=False))
-@click.option("--target", default="tyk2", show_default=True)
-@click.option("--ligands", help="Comma-separated ligand names. Defaults to the selected TYK2 subset.")
-def benchmark_make_ligand_jobs(resources_dir: Path, run_dir: Path, target: str, ligands: str | None) -> None:
-    selected = parse_csv_option(ligands, DEFAULT_TYK2_LIGANDS)
-    paths = make_ligand_jobs(resources_dir, run_dir, target, selected)
-    click.echo(json.dumps({"jobs_written": len(paths), "configs": [str(path) for path in paths]}, indent=2))
-
-
-@benchmark.command("run-ligand-jobs")
-@click.argument("run_dir", type=click.Path(path_type=Path, file_okay=False))
-@ligand_benchmark_protocol_option
-@click.option("--gpus", default="2,3", show_default=True, help="Comma-separated GPU ids.")
-@click.option("--jobs", "max_workers", default=2, show_default=True, type=int, help="Maximum concurrent ligand jobs.")
-@click.option("--ntomp", default=4, show_default=True, type=int, help="GROMACS OpenMP threads per job.")
-@click.option("--mmpbsa-np", default=16, show_default=True, type=int, help="MPI ranks per MMPBSA job.")
-@click.option("--mode", type=click.Choice(["full", "prepare", "md", "analysis", "report"]), default="full", show_default=True)
-@click.option("--force", is_flag=True, help="Clear selected mode and downstream outputs for each job before running.")
-def benchmark_run_ligand_jobs(
-    run_dir: Path,
-    protocol_path: Path,
-    gpus: str,
-    max_workers: int,
-    ntomp: int,
-    mmpbsa_np: int,
-    mode: str,
-    force: bool,
-) -> None:
-    results = run_ligand_jobs(run_dir, protocol_path, parse_gpu_list(gpus), max_workers, ntomp, mmpbsa_np, mode=mode, force=force)
-    click.echo(json.dumps([result.__dict__ | {"log": str(result.log)} for result in results], indent=2))
-
-
-@benchmark.command("report")
-@click.argument("run_dir", type=click.Path(path_type=Path, file_okay=False))
-@click.argument("resources_dir", type=click.Path(path_type=Path, file_okay=False))
-@click.option("--target", default="tyk2", show_default=True)
-@click.option("--output", type=click.Path(path_type=Path, dir_okay=False), required=True)
-def benchmark_report(run_dir: Path, resources_dir: Path, target: str, output: Path) -> None:
-    report = write_benchmark_report(run_dir, resources_dir, target, output)
     click.echo(json.dumps(report, indent=2))
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,12 @@ STANDARD_AMINO_ACIDS = {
 
 def prepare_input_structure(paths: Any, manifest: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
     policy = str(profile.get("amber_prep", {}).get("nonstandard_policy", "fail")).lower()
-    findings = inspect_selected_residues(paths.input / "selected.pdb", manifest["receptor_chains"], manifest["peptide_chains"])
+    if policy not in {"fail", "strip"}:
+        raise SystemExit(f"Unsupported amber_prep.nonstandard_policy for peptide workflow: {policy!r}; use 'fail' or 'strip'.")
+    source_pdb = paths.input / "selected_raw.pdb"
+    if not source_pdb.exists():
+        source_pdb = paths.input / "selected.pdb"
+    findings = inspect_selected_residues(source_pdb, manifest["receptor_chains"], manifest["peptide_chains"])
     cofactor_count = int(manifest.get("receptor_cofactor_residue_count") or 0)
     blocking = []
     if findings["nonstandard_atom_residues"]:
@@ -60,12 +66,14 @@ def prepare_input_structure(paths: Any, manifest: dict[str, Any], profile: dict[
         raise SystemExit(
             "Amber preparation requires explicit handling for "
             + ", ".join(blocking)
-            + ". Set amber_prep.nonstandard_policy: strip only for removable HETATM records; parameterized residues need a custom recipe."
+            + ". Set amber_prep.nonstandard_policy: strip only for removable HETATM records; parameterized residues need a custom recipe. "
+            + f"Findings: {findings}"
         )
 
-    dropped = write_protein_only_pdb(paths.input / "selected.pdb", paths.input / "selected_protein.pdb", manifest["receptor_chains"], manifest["peptide_chains"])
-    write_protein_only_pdb(paths.input / "selected.pdb", paths.input / "selected_receptor.pdb", manifest["receptor_chains"], "")
-    write_protein_only_pdb(paths.input / "selected.pdb", paths.input / "selected_peptide.pdb", "", manifest["peptide_chains"])
+    dropped = write_protein_only_pdb(source_pdb, paths.input / "selected.pdb", manifest["receptor_chains"], manifest["peptide_chains"])
+    shutil.copy2(paths.input / "selected.pdb", paths.input / "selected_protein.pdb")
+    write_protein_only_pdb(source_pdb, paths.input / "selected_receptor.pdb", manifest["receptor_chains"], "")
+    write_protein_only_pdb(source_pdb, paths.input / "selected_peptide.pdb", "", manifest["peptide_chains"])
     receptor_residues = count_selected_residues(paths.input / "selected_receptor.pdb", manifest["receptor_chains"])
     peptide_residues = count_selected_residues(paths.input / "selected_peptide.pdb", manifest["peptide_chains"])
     if receptor_residues <= 0 or peptide_residues <= 0:
@@ -76,8 +84,11 @@ def prepare_input_structure(paths: Any, manifest: dict[str, Any], profile: dict[
     manifest.update(
         {
             "input_preparation": "standard_peptide_atom_records_with_receptor_cofactors" if cofactor_count else "standard_peptide_atom_records",
+            "raw_input_pdb": str(source_pdb),
+            "clean_input_pdb": str(paths.input / "selected.pdb"),
             "amber_prep_recipe": profile.get("amber_prep", {}).get("recipe", "standard_peptide_ff14sb_tip3p"),
             "dropped_nonprotein_residues": dropped,
+            "dropped_nonprotein_residue_count": len(dropped),
             "input_residue_findings": findings,
             "protein_receptor_residue_count": receptor_residues,
             "receptor_cofactor_residue_count": cofactor_count,
@@ -200,6 +211,9 @@ def run_amber_prepare(paths: Any, profile: dict[str, Any]) -> None:
                 "receptor_cofactor_libs": [str(path) for path in cofactor_libs],
                 "pb_radii": "mbondi2",
                 "solvent_shape": profile["system"].get("solvent_shape", "oct"),
+                "solvent_shape_actual": profile["system"].get("solvent_shape", "oct"),
+                "box_retry_used": bool(manifest.get("box_retry_used", False)),
+                "box_retry_reason": manifest.get("box_retry_reason", ""),
                 "water_count_presalt": water_count,
                 "salt_pairs": salt_pairs,
             },
@@ -237,6 +251,9 @@ def run_amber_prepare(paths: Any, profile: dict[str, Any]) -> None:
             "leaprc": ["leaprc.protein.ff14SB", "leaprc.water.tip3p"],
             "pb_radii": "mbondi2",
             "solvent_shape": profile["system"].get("solvent_shape", "oct"),
+            "solvent_shape_actual": profile["system"].get("solvent_shape", "oct"),
+            "box_retry_used": bool(manifest.get("box_retry_used", False)),
+            "box_retry_reason": manifest.get("box_retry_reason", ""),
             "water_count_presalt": water_count,
             "salt_pairs": salt_pairs,
         },

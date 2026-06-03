@@ -2,12 +2,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 RUN_DIR="${RUN_DIR:-${PROJECT_ROOT}/pipeline_tests/peptide_3x5ns}"
 PROTOCOL="${PROTOCOL:-${PROJECT_ROOT}/configs/peptide_crystal_3x5ns.yaml}"
 PYTHON="${PYTHON:-python}"
 NTOMP="${NTOMP:-4}"
 MMPBSA_NP="${MMPBSA_NP:-16}"
+GMXRC="${GMXRC:-/data2/silong/projects/gromacs/gromacs202602/bin/GMXRC}"
+GMX_BIN="${GMX_BIN:-gmx_mpi}"
 
 mkdir -p "$RUN_DIR"
 rm -f "$RUN_DIR"/gpu4.pid "$RUN_DIR"/gpu5.pid "$RUN_DIR"/gpu6.pid "$RUN_DIR"/gpu7.pid
@@ -17,7 +19,7 @@ run_group() {
   shift
   (
     cd "$PROJECT_ROOT"
-    export GPU_ID="$gpu" NTOMP MMPBSA_NP PYTHONUNBUFFERED=1
+    export GPU_ID="$gpu" NTOMP MMPBSA_NP GMXRC GMX_BIN PYTHONUNBUFFERED=1
     for job in "$@"; do
       date -u "+%Y-%m-%dT%H:%M:%SZ start ${job} GPU=${gpu}"
       printf "command: GPU_ID=%s NTOMP=%s MMPBSA_NP=%s %s -m mmpbsa peptide run %s --job-id %s --protocol %s --resume\n" \

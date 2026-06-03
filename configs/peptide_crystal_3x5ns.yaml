@@ -11,11 +11,11 @@ system:
   salt_molar: 0.150
   solvent_padding_angstrom: 10.0
   solvent_shape: oct
-  allow_box_retry: false
+  allow_box_retry: true
 
 amber_prep:
   recipe: standard_peptide_ff14sb_tip3p
-  nonstandard_policy: strip
+  nonstandard_policy: fail
   default_ligand_param_mode: auto
   protein_ff: leaprc.protein.ff14SB
   ligand_ff: leaprc.gaff2

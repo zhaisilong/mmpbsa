@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
@@ -12,11 +13,17 @@ from typing import Any
 
 import yaml
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from mmpbsa.metrics import linear_fit, pearson_r, spearman_r
+
 
 DEFAULT_TYK2_LIGANDS = ["lig_ejm_46", "lig_ejm_54", "lig_ejm_31", "lig_ejm_50", "lig_ejm_43"]
 GAS_CONSTANT_KJ_MOL_K = 8.31446261815324e-3
 DEFAULT_EXPERIMENT_TEMPERATURE_K = 298.15
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_PROTOCOL = PROJECT_ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml"
 
 
 @dataclass(frozen=True)
@@ -52,7 +59,7 @@ def parse_gpu_list(value: str) -> list[str]:
 def target_root(resources_dir: Path, target: str) -> Path:
     root = resources_dir.resolve() / "data" / target
     if not root.exists():
-        raise SystemExit(f"Missing benchmark target directory: {root}")
+        raise SystemExit(f"Missing validation target directory: {root}")
     return root
 
 
@@ -113,7 +120,7 @@ def make_ligand_jobs(resources_dir: Path, run_dir: Path, target: str, ligand_nam
     protein = root / "01_protein" / "crd" / "protein.pdb"
     sdf = root / "02_ligands" / "ligands.sdf"
     if not protein.exists():
-        raise SystemExit(f"Missing benchmark protein PDB: {protein}")
+        raise SystemExit(f"Missing validation protein PDB: {protein}")
     measurements = load_ligand_measurements(resources_dir, target)
     records = load_sdf_records(sdf)
     run_dir = run_dir.resolve()
@@ -136,6 +143,8 @@ def make_ligand_jobs(resources_dir: Path, run_dir: Path, target: str, ligand_nam
             "name": ligand_name,
             "pdb_id": target.upper(),
             "source": "openforcefield/protein-ligand-benchmark",
+            "validation_target": target,
+            "validation_ligand_name": ligand_name,
             "benchmark_target": target,
             "benchmark_ligand_name": ligand_name,
             "complex_pdb": str(protein.resolve()),
@@ -220,7 +229,7 @@ def run_assigned_jobs(
         job_dir = run_dir / job_id
         logs_dir = job_dir / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
-        driver_log = logs_dir / f"benchmark_runner_gpu{gpu_id}.log"
+        driver_log = logs_dir / f"validation_runner_gpu{gpu_id}.log"
         env = os.environ.copy()
         env.update({"GPU_ID": gpu_id, "NTOMP": str(ntomp), "MMPBSA_NP": str(mmpbsa_np)})
         command = [
@@ -251,12 +260,12 @@ def run_assigned_jobs(
     return results
 
 
-def write_benchmark_report(run_dir: Path, resources_dir: Path, target: str, output: Path) -> dict[str, Any]:
+def write_validation_report(run_dir: Path, resources_dir: Path, target: str, output: Path) -> dict[str, Any]:
     measurements = load_ligand_measurements(resources_dir, target)
     rows: list[dict[str, Any]] = []
     for job_id in discover_job_ids(run_dir):
         config = json.loads((run_dir / job_id / f"{job_id}.json").read_text(encoding="utf-8"))
-        ligand_name = config.get("benchmark_ligand_name") or config.get("name") or job_id
+        ligand_name = config.get("validation_ligand_name") or config.get("benchmark_ligand_name") or config.get("name") or job_id
         measurement = measurements[str(ligand_name)]
         summary_path = run_dir / job_id / "result" / "summary.json"
         summary: dict[str, Any] = {}
@@ -273,8 +282,8 @@ def write_benchmark_report(run_dir: Path, resources_dir: Path, target: str, outp
             "GB_delta_total_kJ_mol": summary.get("GB_delta_total_kJ_mol"),
             "PB_delta_total_kJ_mol": summary.get("PB_delta_total_kJ_mol"),
             "PB_delta_total_entropy_corrected_kJ_mol": summary.get("PB_delta_total_entropy_corrected_kJ_mol"),
-            "GB_dmm_like_kJ_mol": summary.get("GB_dmm_like_kJ_mol"),
-            "PB_dmm_like_kJ_mol": summary.get("PB_dmm_like_kJ_mol"),
+            "GB_dMM_kJ_mol": summary.get("GB_dMM_kJ_mol", summary.get("GB_dmm_like_kJ_mol")),
+            "PB_dMM_kJ_mol": summary.get("PB_dMM_kJ_mol", summary.get("PB_dmm_like_kJ_mol")),
         }
         rows.append(row)
     rows.sort(key=lambda row: float(row["experimental_deltaG_kJ_mol"]))
@@ -284,8 +293,8 @@ def write_benchmark_report(run_dir: Path, resources_dir: Path, target: str, outp
             "GB_delta_total_kJ_mol",
             "PB_delta_total_kJ_mol",
             "PB_delta_total_entropy_corrected_kJ_mol",
-            "GB_dmm_like_kJ_mol",
-            "PB_dmm_like_kJ_mol",
+            "GB_dMM_kJ_mol",
+            "PB_dMM_kJ_mol",
         ]
     }
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -307,52 +316,11 @@ def correlation_record(rows: list[dict[str, Any]], computed_key: str) -> dict[st
     return {"n": len(pairs), "pearson_r": pearson_r(xs, ys), "spearman_r": spearman_r(xs, ys), "slope": slope, "intercept": intercept}
 
 
-def pearson_r(xs: list[float], ys: list[float]) -> float:
-    x_mean = sum(xs) / len(xs)
-    y_mean = sum(ys) / len(ys)
-    numerator = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys))
-    x_var = sum((x - x_mean) ** 2 for x in xs)
-    y_var = sum((y - y_mean) ** 2 for y in ys)
-    if x_var == 0 or y_var == 0:
-        return float("nan")
-    return numerator / math.sqrt(x_var * y_var)
-
-
-def spearman_r(xs: list[float], ys: list[float]) -> float:
-    return pearson_r(rank(xs), rank(ys))
-
-
-def rank(values: list[float]) -> list[float]:
-    indexed = sorted(enumerate(values), key=lambda item: item[1])
-    ranks = [0.0] * len(values)
-    i = 0
-    while i < len(indexed):
-        j = i
-        while j + 1 < len(indexed) and indexed[j + 1][1] == indexed[i][1]:
-            j += 1
-        avg_rank = (i + j + 2) / 2.0
-        for k in range(i, j + 1):
-            ranks[indexed[k][0]] = avg_rank
-        i = j + 1
-    return ranks
-
-
-def linear_fit(xs: list[float], ys: list[float]) -> tuple[float, float]:
-    x_mean = sum(xs) / len(xs)
-    y_mean = sum(ys) / len(ys)
-    denominator = sum((x - x_mean) ** 2 for x in xs)
-    if denominator == 0:
-        return float("nan"), float("nan")
-    slope = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys)) / denominator
-    intercept = y_mean - slope * x_mean
-    return slope, intercept
-
-
 def report_markdown(target: str, run_dir: Path, rows: list[dict[str, Any]], correlations: dict[str, dict[str, Any]]) -> str:
     completed = [row for row in rows if row["status"] == "valid"]
     best_key = best_correlation_key(correlations)
     lines = [
-        f"# {target.upper()} Ligand MMPBSA Benchmark",
+        f"# {target.upper()} Ligand MMPBSA Validation",
         "",
         f"- Run directory: `{run_dir.resolve()}`",
         "- Source: `openforcefield/protein-ligand-benchmark`",
@@ -360,7 +328,7 @@ def report_markdown(target: str, run_dir: Path, rows: list[dict[str, Any]], corr
         "",
         "## Results",
         "",
-        "| ligand | status | exp DeltaG kJ/mol | GB total | PB total | PB+entropy | GB dMM-like | PB dMM-like |",
+        "| ligand | status | exp DeltaG kJ/mol | GB total | PB total | PB+entropy | GB dMM | PB dMM |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
@@ -372,8 +340,8 @@ def report_markdown(target: str, run_dir: Path, rows: list[dict[str, Any]], corr
                 gb=format_float(row.get("GB_delta_total_kJ_mol")),
                 pb=format_float(row.get("PB_delta_total_kJ_mol")),
                 pbe=format_float(row.get("PB_delta_total_entropy_corrected_kJ_mol")),
-                gbd=format_float(row.get("GB_dmm_like_kJ_mol")),
-                pbd=format_float(row.get("PB_dmm_like_kJ_mol")),
+                gbd=format_float(row.get("GB_dMM_kJ_mol")),
+                pbd=format_float(row.get("PB_dMM_kJ_mol")),
             )
         )
     lines.extend(["", "## Correlation Lines", ""])
@@ -400,10 +368,10 @@ def report_markdown(target: str, run_dir: Path, rows: list[dict[str, Any]], corr
         )
     lines.append(
         "- Computed MM/PBSA values are substantially shifted relative to experimental DeltaG; "
-        "interpret this benchmark primarily through relative ordering and correlation, not absolute agreement."
+        "interpret this validation primarily through relative ordering and correlation, not absolute agreement."
     )
     lines.append(
-        "- The five-ligand subset is a pipeline validation run. A production benchmark should expand the ligand set "
+        "- The five-ligand subset is a pipeline validation run. A production validation should expand the ligand set "
         "and preferably use repeated trajectories before drawing method-level conclusions."
     )
     lines.extend(
@@ -433,3 +401,55 @@ def format_float(value: Any) -> str:
     if not isinstance(value, (int, float)):
         return ""
     return f"{float(value):.3f}"
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Local TYK2 ligand validation helpers.")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    make_parser = subparsers.add_parser("make-ligand-jobs", help="Write TYK2 ligand job directories from validation resources.")
+    make_parser.add_argument("resources_dir", type=Path)
+    make_parser.add_argument("run_dir", type=Path)
+    make_parser.add_argument("--target", default="tyk2")
+    make_parser.add_argument("--ligands", help="Comma-separated ligand names. Defaults to the selected TYK2 subset.")
+
+    run_parser = subparsers.add_parser("run-ligand-jobs", help="Run prepared ligand jobs across local GPUs.")
+    run_parser.add_argument("run_dir", type=Path)
+    run_parser.add_argument("--protocol", type=Path, default=DEFAULT_PROTOCOL)
+    run_parser.add_argument("--gpus", default="2,3")
+    run_parser.add_argument("--jobs", dest="max_workers", type=int, default=2)
+    run_parser.add_argument("--ntomp", type=int, default=4)
+    run_parser.add_argument("--mmpbsa-np", type=int, default=16)
+    run_parser.add_argument("--mode", choices=["full", "prepare", "md", "analysis", "report"], default="full")
+    run_parser.add_argument("--force", action="store_true")
+
+    report_parser = subparsers.add_parser("report", help="Generate the local TYK2 validation report.")
+    report_parser.add_argument("run_dir", type=Path)
+    report_parser.add_argument("resources_dir", type=Path)
+    report_parser.add_argument("--target", default="tyk2")
+    report_parser.add_argument("--output", type=Path, required=True)
+
+    args = parser.parse_args()
+    if args.command == "make-ligand-jobs":
+        selected = parse_csv_option(args.ligands, DEFAULT_TYK2_LIGANDS)
+        paths = make_ligand_jobs(args.resources_dir, args.run_dir, args.target, selected)
+        print(json.dumps({"jobs_written": len(paths), "configs": [str(path) for path in paths]}, indent=2))
+    elif args.command == "run-ligand-jobs":
+        results = run_ligand_jobs(
+            args.run_dir,
+            args.protocol,
+            parse_gpu_list(args.gpus),
+            args.max_workers,
+            args.ntomp,
+            args.mmpbsa_np,
+            mode=args.mode,
+            force=args.force,
+        )
+        print(json.dumps([result.__dict__ | {"log": str(result.log)} for result in results], indent=2))
+    elif args.command == "report":
+        report = write_validation_report(args.run_dir, args.resources_dir, args.target, args.output)
+        print(json.dumps(report, indent=2))
+
+
+if __name__ == "__main__":
+    main()

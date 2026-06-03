@@ -1,10 +1,11 @@
 protocol:
-  replica_count: 5
-  production_ns: 5.0
+  replica_indices: [1, 2, 3]
+  replica_count: 3
+  production_ns: 15.0
   xtc_interval_ps: 20.0
-  mmpbsa_start_ns: 3.0
+  mmpbsa_start_ns: 5.0
   mmpbsa_interval_ps: 20.0
-  min_mmpbsa_frames: 500
+  min_mmpbsa_frames: 1500
 
 system:
   temperature_k: 300.0

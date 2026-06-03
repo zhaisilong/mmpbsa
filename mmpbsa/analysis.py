@@ -68,7 +68,7 @@ def parse_mmpbsa_full(path: Path) -> dict[str, Any]:
             values[key.replace("_kcal_mol", "_sem_kcal_mol")] = nums[2]
 
     add_kj(values)
-    add_dmm_like(values)
+    add_dmm(values)
     return {"frames": frames, "rows": rows, "values": values}
 
 
@@ -78,7 +78,7 @@ def add_kj(values: dict[str, float]) -> None:
             values[key.replace("_kcal_mol", "_kJ_mol")] = value * 4.184
 
 
-def add_dmm_like(values: dict[str, float]) -> None:
+def add_dmm(values: dict[str, float]) -> None:
     gb_terms = {"GB_vdw_kcal_mol", "GB_electrostatic_kcal_mol", "GB_polar_solvation_kcal_mol", "GB_nonpolar_solvation_kcal_mol"}
     if gb_terms <= values.keys():
         gb_dmm = (
@@ -87,6 +87,9 @@ def add_dmm_like(values: dict[str, float]) -> None:
             + 0.2 * values["GB_polar_solvation_kcal_mol"]
             + values["GB_nonpolar_solvation_kcal_mol"]
         )
+        values["GB_dMM_kcal_mol"] = gb_dmm
+        values["GB_dMM_kJ_mol"] = gb_dmm * 4.184
+        # Compatibility alias for reports generated before v0.1.3.
         values["GB_dmm_like_kcal_mol"] = gb_dmm
         values["GB_dmm_like_kJ_mol"] = gb_dmm * 4.184
     pb_terms = {"PB_vdw_kcal_mol", "PB_electrostatic_kcal_mol", "PB_polar_solvation_kcal_mol", "PB_nonpolar_solvation_kcal_mol"}
@@ -100,8 +103,15 @@ def add_dmm_like(values: dict[str, float]) -> None:
         )
         values["PB_nonpolar_total_kcal_mol"] = pb_nonpolar
         values["PB_nonpolar_total_kJ_mol"] = pb_nonpolar * 4.184
+        values["PB_dMM_kcal_mol"] = pb_dmm
+        values["PB_dMM_kJ_mol"] = pb_dmm * 4.184
+        # Compatibility alias for reports generated before v0.1.3.
         values["PB_dmm_like_kcal_mol"] = pb_dmm
         values["PB_dmm_like_kJ_mol"] = pb_dmm * 4.184
+
+
+def add_dmm_like(values: dict[str, float]) -> None:
+    add_dmm(values)
 
 
 def audit_mmpbsa(parsed: dict[str, Any], min_frames: int, internal_limit: float, internal_std_limit: float) -> dict[str, Any]:
@@ -151,7 +161,7 @@ def audit_mmpbsa(parsed: dict[str, Any], min_frames: int, internal_limit: float,
     else:
         notes.append("Difference BOND/ANGLE/DIHED terms cancel within 0.1 kcal/mol.")
 
-    required_values = ["GB_delta_total_kJ_mol", "PB_delta_total_kJ_mol", "GB_dmm_like_kJ_mol", "PB_dmm_like_kJ_mol"]
+    required_values = ["GB_delta_total_kJ_mol", "PB_delta_total_kJ_mol", "GB_dMM_kJ_mol", "PB_dMM_kJ_mol"]
     missing = [key for key in required_values if key not in parsed["values"]]
     if missing:
         issues.append({"severity": "fail", "code": "missing_energy_terms", "message": "Missing energy terms: " + ", ".join(missing)})

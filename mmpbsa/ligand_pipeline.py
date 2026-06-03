@@ -19,6 +19,7 @@ from .analysis import (
     write_trajectory_qc_csv,
 )
 from .common import (
+    aggregate_replica_values,
     flatten_atom_range,
     explicit_water_count,
     frame_settings,
@@ -923,21 +924,6 @@ def add_pb_entropy_corrected(values: dict[str, float]) -> None:
     corrected = pb + entropy
     values["PB_delta_total_entropy_corrected_kcal_mol"] = corrected
     values["PB_delta_total_entropy_corrected_kJ_mol"] = corrected * 4.184
-
-
-def aggregate_replica_values(values_by_replica: list[dict[str, float]]) -> dict[str, float]:
-    if not values_by_replica:
-        return {}
-    keys = sorted(set.intersection(*(set(values) for values in values_by_replica)))
-    aggregated: dict[str, float] = {}
-    for key in keys:
-        vals = [float(values[key]) for values in values_by_replica]
-        mean = sum(vals) / len(vals)
-        aggregated[key] = mean
-        if len(vals) > 1:
-            variance = sum((value - mean) ** 2 for value in vals) / (len(vals) - 1)
-            aggregated[f"{key}_replica_sem"] = math.sqrt(variance / len(vals))
-    return aggregated
 
 
 def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity: bool) -> str:
