@@ -158,8 +158,9 @@ Ligand profiles:
 Peptide MMPBSA uses Amber ff14SB and `mbondi2`. Profiles may explicitly set
 `mmpbsa.epsilon` or `mmpbsa.dielectric`; otherwise the pipeline applies the
 charged/polar/nonpolar interface rule and records the selected value in the
-summary. Explicit interface water defaults to 0. PB entropy-corrected output is
-diagnostic and is not treated as a validated default score.
+summary. Explicit interface water defaults to 0. Entropy is disabled by default;
+PB entropy-corrected output is available only for explicit sensitivity profiles
+and is not treated as a validated default score.
 
 Ligand production defaults expect RESP-charged ligand input. Use AM1-BCC
 fallback profiles only when that approximation is intentional.

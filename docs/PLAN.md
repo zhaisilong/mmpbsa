@@ -48,15 +48,17 @@ Default behavior fails when selected steps already have done files. `--resume` s
 - Ligand crystal defaults use independent replica directories under
   `md/repXX`; MMPBSA can be skipped for production MD-only runs or enabled for
   benchmark profiles.
-- Ligand MMPBSA uses MM/GBSA as the primary ranking score and MM/PBSA with
-  requested entropy correction as a secondary score. Replica results are
+- Ligand MMPBSA uses MM/GBSA as the primary ranking score and MM/PBSA as a
+  secondary score. Entropy is off by default and reserved for explicit
+  sensitivity profiles. Replica results are
   averaged in `analysis/mmpbsa/audit.json`.
 - Peptide crystal profiles use independent `md/repXX` directories and aggregate
   dry frames for MMPBSA. Stability QC is reported per replica.
 - Peptide dielectric uses explicit profile config when present; otherwise it
   uses charged/polar/nonpolar interface classification. PB entropy-corrected
-  values are diagnostic outputs; peptide explicit-water MMPBSA is intentionally
-  fail-fast until a dedicated sensitivity branch is implemented.
+  values are diagnostic outputs only when entropy is explicitly enabled; peptide
+  explicit-water MMPBSA is intentionally fail-fast until a dedicated sensitivity
+  branch is implemented.
 
 ## Test Plan
 

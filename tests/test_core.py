@@ -367,6 +367,11 @@ CL- 1
         self.assertIn("indi=3.000", text)
         self.assertIn("radiopt=0", text)
         self.assertIn("inp=2", text)
+        self.assertIn("entropy=0", text)
+        self.assertNotIn("&nmode", text)
+        configured = json.loads(json.dumps(profile))
+        configured["mmpbsa"]["entropy"] = "pb"
+        text = mmpbsa_input_text(manifest, configured, sanity=False)
         self.assertIn("entropy=1", text)
         self.assertIn("&nmode", text)
         sanity = mmpbsa_input_text(manifest, profile, sanity=True)

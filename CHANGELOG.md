@@ -27,4 +27,4 @@
 - Switched protein defaults to Amber ff14SB and ligand PB/GB radii to `mbondi2`.
 - Added RESP fail-fast policy for production ligand defaults and an explicit AM1-BCC benchmark profile.
 - Added ligand MMPBSA gating, automatic job-level dielectric selection, fixed interface-water retention, and replica-level MMPBSA aggregation.
-- Added peptide crystal 3x5ns/5x5ns profiles, peptide MMPBSA dielectric policy, per-replica stability QC, and PB entropy-corrected diagnostic output.
+- Added peptide crystal 3x5ns/5x5ns profiles, peptide MMPBSA dielectric policy, per-replica stability QC, and opt-in PB entropy-corrected diagnostic output.

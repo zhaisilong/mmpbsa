@@ -39,7 +39,7 @@ mmpbsa:
   np: 16
   keep_tmp: false
   explicit_water_count: 2
-  entropy: pb
+  entropy: none
   gb_igb: 5
   gb_epsout: 78.5
   pb_exdi: 80.0
