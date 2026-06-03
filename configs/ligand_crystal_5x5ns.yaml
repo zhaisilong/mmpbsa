@@ -36,7 +36,7 @@ md:
 mmpbsa:
   enabled: false
   mpi: true
-  np: 32
+  np: 16
   keep_tmp: false
   explicit_water_count: 2
   entropy: pb

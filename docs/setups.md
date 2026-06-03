@@ -74,7 +74,7 @@ GMXRC=/path/to/gromacs/bin/GMXRC \
 GMX_BIN=gmx_mpi \
 GPU_ID=0 \
 NTOMP=8 \
-MMPBSA_NP=32 \
+MMPBSA_NP=16 \
 mmpbsa doctor --protocol configs/default_15ns.yaml
 ```
 

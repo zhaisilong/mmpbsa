@@ -232,6 +232,23 @@ CL- 1
         self.assertEqual(settings["replica_count"], 3)
         self.assertEqual(settings["expected_mmpbsa_frames"], 303)
 
+    def test_protocol_mmpbsa_rank_defaults(self) -> None:
+        normal_protocols = [
+            "default_15ns.yaml",
+            "ligand_default_15ns.yaml",
+            "ligand_crystal_3x5ns.yaml",
+            "ligand_crystal_3x5ns_mmpbsa_bcc.yaml",
+            "ligand_crystal_5x5ns.yaml",
+            "peptide_crystal_3x5ns.yaml",
+            "peptide_crystal_5x5ns.yaml",
+        ]
+        for name in normal_protocols:
+            with self.subTest(name=name):
+                profile = load_profile(ROOT / "configs" / name)
+                self.assertEqual(profile["mmpbsa"]["np"], 16)
+        smoke = load_profile(ROOT / "configs" / "smoke_20ps.yaml")
+        self.assertEqual(smoke["mmpbsa"]["np"], 1)
+
     def test_gmx_runtime_expands_environment(self) -> None:
         profile = {"runtime": {"gmxrc": "${GMXRC}", "gmx_bin": "${GMX_BIN}"}}
         with patch.dict("os.environ", {"GMXRC": "/opt/gromacs/bin/GMXRC", "GMX_BIN": "gmx_mpi"}, clear=True):
