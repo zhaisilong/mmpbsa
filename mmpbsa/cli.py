@@ -12,6 +12,7 @@ from .aggregate import aggregate_run_dir
 from .common import DEFAULT_LIGAND_PROFILE, DEFAULT_PROFILE, frame_settings, gmx_runtime, load_profile, mpi_pythonpath, profile_with_replica_indices, shlex_quote
 from .ligand_pipeline import LigandPipeline
 from .peptide_pipeline import PeptidePipeline
+from .postprocess_sweep import parse_epsilons, peptide_postprocess_sweep
 from .replica_merge import merge_ligand_replicas, merge_peptide_replicas
 from .runner import DoneFileRunner, apply_env_overrides, discover_job_contexts
 
@@ -85,6 +86,44 @@ def peptide_run(run_dir: Path, protocol_path: Path, job_id: str | None, replica_
 @click.option("--force", is_flag=True, help="Overwrite merged audit/summary outputs if they already exist.")
 def peptide_merge_replicas(output_job_dir: Path, source_job_dirs: tuple[Path, ...], force: bool) -> None:
     report = merge_peptide_replicas(output_job_dir, list(source_job_dirs), force=force)
+    click.echo(json.dumps(report, indent=2))
+
+
+@peptide.command("sweep-postprocess")
+@click.argument("run_dir", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), required=True, help="Directory for sweep work files and reports.")
+@click.option("--assay-dir", type=click.Path(path_type=Path, file_okay=False), help="Directory with assay_*.yaml files for correlation reporting.")
+@click.option("--epsilons", default="4,8,12,20", show_default=True, help="Comma-separated internal dielectric values.")
+@click.option("--salt-molar", type=float, default=0.150, show_default=True, help="GB saltcon and PB istrng value in molarity.")
+@click.option("--np", "np_ranks", type=click.IntRange(1), default=16, show_default=True, help="MPI ranks for recomputed MMPBSA jobs.")
+@click.option("--max-workers", type=click.IntRange(1), default=1, show_default=True, help="Number of independent replica MMPBSA jobs to run concurrently.")
+@click.option("--job-id", help="Run or inspect only one job directory.")
+@click.option("--force", is_flag=True, help="Remove existing recomputed work directories before running.")
+@click.option("--dry-run", is_flag=True, help="Discover jobs and write a manifest without running MMPBSA.")
+def peptide_sweep_postprocess(
+    run_dir: Path,
+    output_dir: Path,
+    assay_dir: Path | None,
+    epsilons: str,
+    salt_molar: float,
+    np_ranks: int,
+    max_workers: int,
+    job_id: str | None,
+    force: bool,
+    dry_run: bool,
+) -> None:
+    report = peptide_postprocess_sweep(
+        run_dir,
+        output_dir,
+        assay_dir,
+        epsilons=parse_epsilons(epsilons),
+        salt_molar=salt_molar,
+        np_ranks=np_ranks,
+        max_workers=max_workers,
+        job_id=job_id,
+        force=force,
+        dry_run=dry_run,
+    )
     click.echo(json.dumps(report, indent=2))
 
 

@@ -17,6 +17,7 @@ from .common import (
 
 
 STANDARD_AMINO_ACIDS = {
+    "ACE",
     "ALA",
     "ARG",
     "ASH",
@@ -38,6 +39,7 @@ STANDARD_AMINO_ACIDS = {
     "LYN",
     "LYS",
     "MET",
+    "NHE",
     "PHE",
     "PRO",
     "SER",

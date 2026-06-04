@@ -18,6 +18,7 @@ from mmpbsa.peptide_amber import tleap_text_with_cofactors as peptide_tleap_text
 from mmpbsa.peptide_pipeline import PeptidePipeline
 from mmpbsa.peptide_pipeline import mmpbsa_input_text as peptide_mmpbsa_input_text
 from mmpbsa.peptide_pipeline import peptide_dielectric_policy
+from mmpbsa.postprocess_sweep import mmpbsa_input_with_epsilon, parse_epsilons, ridge_loocv_residuals
 from mmpbsa.metrics import linear_fit, pearson_r, spearman_r
 from mmpbsa.replica_merge import merge_ligand_replicas, merge_peptide_replicas
 from mmpbsa.runner import DoneFileRunner, JobContext, discover_job_contexts
@@ -748,6 +749,37 @@ CL- 1
         self.assertIn("mol = combine { rec cof1 pep }", text)
         self.assertIn("addIonsRand mol Na+ 2", text)
 
+    def test_peptide_caps_are_allowed_atom_residues(self) -> None:
+        profile = load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml")
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "input"
+            input_dir.mkdir()
+            (input_dir / "selected_raw.pdb").write_text(
+                "\n".join(
+                    [
+                        "ATOM      1  N   GLY A   1       0.000   0.000   0.000  1.00  0.00           N",
+                        "ATOM      2  CA  GLY A   1       1.000   0.000   0.000  1.00  0.00           C",
+                        "ATOM      3  CH3 ACE B   2       2.000   0.000   0.000  1.00  0.00           C",
+                        "ATOM      4  C   ACE B   2       3.000   0.000   0.000  1.00  0.00           C",
+                        "ATOM      5  N   ARG B   3       4.000   0.000   0.000  1.00  0.00           N",
+                        "ATOM      6  CA  ARG B   3       5.000   0.000   0.000  1.00  0.00           C",
+                        "ATOM      7  N   NHE B   4       6.000   0.000   0.000  1.00  0.00           N",
+                        "END",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            paths = type("Paths", (), {"input": input_dir})()
+            manifest = {"receptor_chains": "A", "peptide_chains": "B"}
+
+            prepared = peptide_prepare_input_structure(paths, manifest, profile)
+
+            self.assertEqual(prepared["peptide_residue_count"], 3)
+            clean = (input_dir / "selected_peptide.pdb").read_text(encoding="utf-8")
+            self.assertIn(" ACE B", clean)
+            self.assertIn(" NHE B", clean)
+
     def test_peptide_hetatm_fails_by_default(self) -> None:
         profile = json.loads(json.dumps(load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml")))
         profile["amber_prep"]["nonstandard_policy"] = "fail"
@@ -784,6 +816,37 @@ CL- 1
             self.assertTrue((input_dir / "selected_receptor.pdb").exists())
             self.assertTrue((input_dir / "selected_peptide.pdb").exists())
 
+    def test_postprocess_sweep_input_rewrites_dielectric_and_salt(self) -> None:
+        template = """&gb
+  igb=5,
+  epsin=4.000,
+  epsout=78.500,
+  saltcon=0.000,
+/
+&pb
+  istrng=0.000,
+  indi=4.000,
+  exdi=80.000,
+/
+"""
+        text = mmpbsa_input_with_epsilon(template, 12.0, 0.150)
+        self.assertIn("epsin=12.000", text)
+        self.assertIn("indi=12.000", text)
+        self.assertIn("saltcon=0.150", text)
+        self.assertIn("istrng=0.150", text)
+        self.assertIn("epsout=78.500", text)
+        self.assertEqual(parse_epsilons("20,4,8,4"), [4.0, 8.0, 20.0])
+
+    def test_postprocess_sweep_ridge_residuals_remove_simple_charge_trend(self) -> None:
+        rows = [
+            {"score": -100.0, "peptide_charge": 1.0, "peptide_residue_count": 10.0, "peptide_sasa_lcpo_angstrom2": 200.0, "native_contacts_mean": 50.0},
+            {"score": -200.0, "peptide_charge": 2.0, "peptide_residue_count": 10.0, "peptide_sasa_lcpo_angstrom2": 200.0, "native_contacts_mean": 50.0},
+            {"score": -300.0, "peptide_charge": 3.0, "peptide_residue_count": 10.0, "peptide_sasa_lcpo_angstrom2": 200.0, "native_contacts_mean": 50.0},
+            {"score": -400.0, "peptide_charge": 4.0, "peptide_residue_count": 10.0, "peptide_sasa_lcpo_angstrom2": 200.0, "native_contacts_mean": 50.0},
+        ]
+        residuals = ridge_loocv_residuals(rows, "score", ["peptide_charge", "peptide_residue_count", "peptide_sasa_lcpo_angstrom2", "native_contacts_mean"], alpha=0.0)
+        self.assertLess(max(abs(value) for value in residuals), 1e-9)
+
     def test_cli_help(self) -> None:
         if not CLICK_AVAILABLE:
             self.skipTest("click is not installed in this Python environment")
@@ -795,9 +858,13 @@ CL- 1
         peptide_help = CliRunner().invoke(cli, ["peptide", "--help"])
         self.assertEqual(peptide_help.exit_code, 0)
         self.assertIn("merge-replicas", peptide_help.output)
+        self.assertIn("sweep-postprocess", peptide_help.output)
         peptide_run_help = CliRunner().invoke(cli, ["peptide", "run", "--help"])
         self.assertEqual(peptide_run_help.exit_code, 0)
         self.assertIn("--replica-index", peptide_run_help.output)
+        peptide_sweep_help = CliRunner().invoke(cli, ["peptide", "sweep-postprocess", "--help"])
+        self.assertEqual(peptide_sweep_help.exit_code, 0)
+        self.assertIn("--max-workers", peptide_sweep_help.output)
         ligand_help = CliRunner().invoke(cli, ["ligand", "--help"])
         self.assertEqual(ligand_help.exit_code, 0)
         self.assertIn("merge-replicas", ligand_help.output)
