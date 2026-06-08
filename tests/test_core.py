@@ -22,6 +22,9 @@ from mmpbsa.postprocess_sweep import mmpbsa_input_with_epsilon, parse_epsilons, 
 from mmpbsa.metrics import linear_fit, pearson_r, spearman_r
 from mmpbsa.replica_merge import merge_ligand_replicas, merge_peptide_replicas
 from mmpbsa.runner import DoneFileRunner, JobContext, discover_job_contexts
+from validation.kras_5xco.pilot import CifAtom, PILOT_VARIANTS, peptide_resname_for_amber, variant_peptide_atoms
+from validation.kras_5xco.report import report_kras_5xco_pilot
+from validation.kras_5xco import report as kras_pilot_report_module
 from validation.ligand_tyk2.scaffold import assign_jobs_to_gpus, experimental_delta_g_kj_mol, load_sdf_records
 
 try:
@@ -837,6 +840,28 @@ CL- 1
         self.assertIn("epsout=78.500", text)
         self.assertEqual(parse_epsilons("20,4,8,4"), [4.0, 8.0, 20.0])
 
+    def test_kras_pilot_variant_position_maps(self) -> None:
+        self.assertEqual(PILOT_VARIANTS["WT_PEP_0001"].keep_positions, tuple(range(1, 22)))
+        self.assertEqual(PILOT_VARIANTS["del4R_PEP_0002"].keep_positions, (1, 4, 5, *range(6, 19), 21))
+        self.assertEqual(PILOT_VARIANTS["core13_PEP_0003"].keep_positions, (1, *range(6, 17), 21))
+        self.assertEqual(PILOT_VARIANTS["L8A_PEP_0006"].mutations, {8: "ALA"})
+        self.assertEqual(peptide_resname_for_amber("NH2"), "NHE")
+        self.assertEqual(peptide_resname_for_amber("CYS"), "CYX")
+
+    def test_kras_pilot_alanine_mutation_keeps_ala_heavy_atoms(self) -> None:
+        def atom(position: int, atom_name: str, resname: str = "LEU") -> CifAtom:
+            return CifAtom("ATOM", atom_name, resname, "B", str(position - 1), float(position), 0.0, 0.0, 1.0, 0.0, atom_name[0])
+
+        template = {
+            position: [atom(position, name, "LEU") for name in ("N", "CA", "C", "O", "CB", "CG", "CD1", "CD2")]
+            for position in range(1, 22)
+        }
+        mutated = variant_peptide_atoms(template, PILOT_VARIANTS["L8A_PEP_0006"])
+        residue_8 = mutated[7]
+
+        self.assertEqual({item.resname for item in residue_8}, {"ALA"})
+        self.assertEqual([item.atom for item in residue_8], ["N", "CA", "C", "O", "CB"])
+
     def test_postprocess_sweep_ridge_residuals_remove_simple_charge_trend(self) -> None:
         rows = [
             {"score": -100.0, "peptide_charge": 1.0, "peptide_residue_count": 10.0, "peptide_sasa_lcpo_angstrom2": 200.0, "native_contacts_mean": 50.0},
@@ -846,6 +871,82 @@ CL- 1
         ]
         residuals = ridge_loocv_residuals(rows, "score", ["peptide_charge", "peptide_residue_count", "peptide_sasa_lcpo_angstrom2", "native_contacts_mean"], alpha=0.0)
         self.assertLess(max(abs(value) for value in residuals), 1e-9)
+
+    def test_kras_5xco_pilot_report_writes_outputs(self) -> None:
+        if kras_pilot_report_module.yaml is None:
+            self.skipTest("PyYAML is not installed in this Python environment")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = root / "mmpbsa_5xco_pilot"
+            assay_dir = root / "assay"
+            output_dir = root / "correlation"
+            assay_dir.mkdir()
+            assay_dir.joinpath("assay_0001.yaml").write_text(
+                """
+assay_group:
+  nucleotide_state: GDP
+records:
+  - ligand_id: PEP_0001
+    protein_id: PRO_0001
+    mutation_label: WT
+    endpoint_relation: "="
+    endpoint_type: KD
+    standard_value_nM: 10.0
+  - ligand_id: PEP_0002
+    protein_id: PRO_0001
+    mutation_label: del4R
+    endpoint_relation: "="
+    endpoint_type: KD
+    standard_value_nM: 100.0
+""",
+                encoding="utf-8",
+            )
+
+            def write_job(job_id: str, charge: float, gb: float, pb: float) -> None:
+                job = run_dir / job_id
+                (job / "result").mkdir(parents=True)
+                (job / "analysis" / "qc").mkdir(parents=True)
+                (job / "analysis" / "mmpbsa").mkdir(parents=True)
+                ligand_id = "_".join(job_id.split("_gdp_")[0].split("_")[-2:])
+                (job / f"{job_id}.json").write_text(json.dumps({"ligand_id": ligand_id, "peptide_charge": charge}), encoding="utf-8")
+                (job / "manifest.json").write_text(json.dumps({"peptide_residue_count": 21, "replicas": ["rep01", "rep02", "rep03"]}), encoding="utf-8")
+                summary = {
+                    "status": "valid",
+                    "trajectory_qc_status": "valid",
+                    "mmpbsa_qc_status": "valid",
+                    "mmpbsa_frames": 1503.0,
+                    "replica_count": 3,
+                    "GB_delta_total_kJ_mol": gb,
+                    "GB_delta_total_kJ_mol_replica_sem": 1.0,
+                    "PB_delta_total_kJ_mol": pb,
+                    "PB_delta_total_kJ_mol_replica_sem": 1.5,
+                    "GB_dMM_kJ_mol": gb - 10.0,
+                    "PB_dMM_kJ_mol": pb - 10.0,
+                    "GB_vdw_kJ_mol": -50.0,
+                    "PB_vdw_kJ_mol": -50.0,
+                    "replica_qc": [
+                        {
+                            "peptide_bb_rmsd_after_receptor_fit_angstrom": {"mean": 2.0},
+                            "receptor_bb_rmsd_angstrom": {"mean": 1.0},
+                            "native_contacts": {"rec_pep[native]": {"mean": 100.0}},
+                        }
+                    ],
+                }
+                (job / "result" / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+            write_job("WT_PEP_0001_gdp_mg", 7.0, -450.0, -210.0)
+            write_job("WT_PEP_0001_gdp_only", 7.0, -400.0, -180.0)
+            write_job("del4R_PEP_0002_gdp_mg", 2.0, -350.0, -120.0)
+            write_job("del4R_PEP_0002_gdp_only", 2.0, -330.0, -110.0)
+
+            report = report_kras_5xco_pilot(run_dir, output_dir, assay_dir)
+
+            self.assertEqual(report["pilot_row_count"], 4)
+            self.assertTrue((output_dir / "kras_5xco_mg_pilot_results.csv").exists())
+            self.assertTrue((output_dir / "kras_5xco_mg_pilot_correlations.csv").exists())
+            self.assertTrue((output_dir / "kras_5xco_mg_pilot_decision.json").exists())
+            self.assertTrue((output_dir / "report_kras_5xco_mg_pilot.html").exists())
 
     def test_cli_help(self) -> None:
         if not CLICK_AVAILABLE:
@@ -859,6 +960,8 @@ CL- 1
         self.assertEqual(peptide_help.exit_code, 0)
         self.assertIn("merge-replicas", peptide_help.output)
         self.assertIn("sweep-postprocess", peptide_help.output)
+        self.assertNotIn("build-kras-5xco-pilot", peptide_help.output)
+        self.assertNotIn("report-kras-5xco-pilot", peptide_help.output)
         peptide_run_help = CliRunner().invoke(cli, ["peptide", "run", "--help"])
         self.assertEqual(peptide_run_help.exit_code, 0)
         self.assertIn("--replica-index", peptide_run_help.output)
