@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.6 - 2026-06-03
+
+- Fixed peptide input cleanup so common Amber peptide caps and residue variants
+  such as `ACE`, `NME`, `NHE`, `NH2`, `CYX`, `CYM`, `ASH`, `GLH`, `HID`, `HIE`,
+  `HIP`, and `LYN` are retained even when source PDB files mark them as
+  `HETATM`.
+- Normalized retained Amber peptide `HETATM` records to `ATOM` in cleaned
+  Amber-facing input files while keeping unknown HETATM handling strict.
+
 ## v0.1.5 - 2026-06-03
 
 - Added ligand `3x15ns`, `3x15ns_mmpbsa_bcc`, and `1x15ns` crystal-start

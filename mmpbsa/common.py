@@ -235,10 +235,17 @@ def residue_id(line: str) -> tuple[str, str, str, str]:
     return (line[21].strip(), line[17:20].strip(), line[22:26].strip(), line[26].strip())
 
 
-def write_protein_only_pdb(source: Path, target: Path, receptor_chains: str, ligand_chains: str) -> list[dict[str, str]]:
+def write_protein_only_pdb(
+    source: Path,
+    target: Path,
+    receptor_chains: str,
+    ligand_chains: str,
+    accepted_hetero_resnames: set[str] | None = None,
+) -> list[dict[str, str]]:
     chain_order = split_chain_spec(receptor_chains) + split_chain_spec(ligand_chains)
     lines_by_chain = {chain: [] for chain in chain_order}
     dropped: dict[tuple[str, str, str, str], str] = {}
+    accepted = {name.upper() for name in (accepted_hetero_resnames or set())}
     for line in source.read_text(encoding="utf-8", errors="replace").splitlines():
         if line.startswith("ATOM  "):
             chain = line[21].strip()
@@ -247,7 +254,11 @@ def write_protein_only_pdb(source: Path, target: Path, receptor_chains: str, lig
         elif line.startswith("HETATM"):
             chain = line[21].strip()
             if chain in lines_by_chain:
-                dropped[residue_id(line)] = line[76:78].strip()
+                resname = line[17:20].strip().upper()
+                if resname in accepted:
+                    lines_by_chain[chain].append("ATOM  " + line[6:].rstrip() + "\n")
+                else:
+                    dropped[residue_id(line)] = line[76:78].strip()
 
     output: list[str] = []
     for chain in chain_order:
@@ -291,6 +302,14 @@ def count_waters(pdb: Path) -> int:
     return len(waters)
 
 
+def pdb_residue_index(line: str) -> int:
+    resseq = line[22:26].strip()
+    icode = line[26].strip()
+    if icode.isdigit():
+        resseq = f"{resseq}{icode}"
+    return int(resseq)
+
+
 def residue_atoms(pdb_path: Path) -> dict[int, list[int]]:
     atoms: dict[int, list[int]] = {}
     for line in pdb_path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -298,7 +317,7 @@ def residue_atoms(pdb_path: Path) -> dict[int, list[int]]:
             continue
         try:
             atom_index = int(line[6:11])
-            residue_index = int(line[22:26])
+            residue_index = pdb_residue_index(line)
         except ValueError as exc:
             raise SystemExit(f"Could not parse atom/residue indices from {pdb_path}: {line}") from exc
         atoms.setdefault(residue_index, []).append(atom_index)

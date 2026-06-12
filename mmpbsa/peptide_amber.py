@@ -40,6 +40,8 @@ STANDARD_AMINO_ACIDS = {
     "LYS",
     "MET",
     "NHE",
+    "NH2",
+    "NME",
     "PHE",
     "PRO",
     "SER",
@@ -72,10 +74,28 @@ def prepare_input_structure(paths: Any, manifest: dict[str, Any], profile: dict[
             + f"Findings: {findings}"
         )
 
-    dropped = write_protein_only_pdb(source_pdb, paths.input / "selected.pdb", manifest["receptor_chains"], manifest["peptide_chains"])
+    dropped = write_protein_only_pdb(
+        source_pdb,
+        paths.input / "selected.pdb",
+        manifest["receptor_chains"],
+        manifest["peptide_chains"],
+        accepted_hetero_resnames=STANDARD_AMINO_ACIDS,
+    )
     shutil.copy2(paths.input / "selected.pdb", paths.input / "selected_protein.pdb")
-    write_protein_only_pdb(source_pdb, paths.input / "selected_receptor.pdb", manifest["receptor_chains"], "")
-    write_protein_only_pdb(source_pdb, paths.input / "selected_peptide.pdb", "", manifest["peptide_chains"])
+    write_protein_only_pdb(
+        source_pdb,
+        paths.input / "selected_receptor.pdb",
+        manifest["receptor_chains"],
+        "",
+        accepted_hetero_resnames=STANDARD_AMINO_ACIDS,
+    )
+    write_protein_only_pdb(
+        source_pdb,
+        paths.input / "selected_peptide.pdb",
+        "",
+        manifest["peptide_chains"],
+        accepted_hetero_resnames=STANDARD_AMINO_ACIDS,
+    )
     receptor_residues = count_selected_residues(paths.input / "selected_receptor.pdb", manifest["receptor_chains"])
     peptide_residues = count_selected_residues(paths.input / "selected_peptide.pdb", manifest["peptide_chains"])
     if receptor_residues <= 0 or peptide_residues <= 0:
@@ -108,21 +128,26 @@ def inspect_selected_residues(pdb: Path, receptor_chains: str, ligand_chains: st
     selected = set(split_chain_spec(receptor_chains) + split_chain_spec(ligand_chains))
     nonstandard_atom: dict[tuple[str, str, str, str], str] = {}
     hetero: dict[tuple[str, str, str, str], str] = {}
+    accepted_hetero: dict[tuple[str, str, str, str], str] = {}
     for line in pdb.read_text(encoding="utf-8", errors="replace").splitlines():
         if not line.startswith(("ATOM  ", "HETATM")):
             continue
         chain = line[21].strip()
         if chain not in selected:
             continue
-        resname = line[17:20].strip()
+        resname = line[17:20].strip().upper()
         key = (chain, resname, line[22:26].strip(), line[26].strip())
         if line.startswith("HETATM"):
-            hetero[key] = line[76:78].strip()
+            if resname in STANDARD_AMINO_ACIDS:
+                accepted_hetero[key] = line[76:78].strip()
+            else:
+                hetero[key] = line[76:78].strip()
         elif resname not in STANDARD_AMINO_ACIDS:
             nonstandard_atom[key] = line[76:78].strip()
     return {
         "nonstandard_atom_residues": residue_records(nonstandard_atom),
         "hetero_residues": residue_records(hetero),
+        "accepted_hetero_residues": residue_records(accepted_hetero),
     }
 
 

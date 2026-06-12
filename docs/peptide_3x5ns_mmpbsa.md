@@ -45,6 +45,9 @@ dataset.
   input as `input/selected_raw.pdb`, write ATOM-only cleaned structures for
   Amber, and fail unless `amber_prep.nonstandard_policy: strip` is set
   explicitly for removable HETATM records.
+- Amber-supported peptide caps and residue variants such as `ACE`, `NME`,
+  `NHE`, `NH2`, `CYX`, `CYM`, `ASH`, `GLH`, `HID`, `HIE`, `HIP`, and `LYN` are
+  treated as peptide residues and retained even if the input PDB uses `HETATM`.
 
 ## Job List
 

@@ -201,6 +201,11 @@ set it to `strip` only when the HETATM records are known removable crystallizati
 or buffer species. Dropped residues are recorded in the job manifest and
 `result/summary.json`.
 
+Common Amber peptide residues and caps such as `ACE`, `NME`, `NHE`, `NH2`,
+`CYX`, `CYM`, `ASH`, `GLH`, `HID`, `HIE`, `HIP`, and `LYN` are retained even if
+the input PDB marks them as `HETATM`; the cleaned Amber-facing files normalize
+those records to `ATOM`.
+
 Peptide crystal profiles keep `solvent_shape: oct` as the first choice and can
 automatically retry with `solvent_shape: box` if EM detects a water-box overlap
 or non-finite force. The retry decision and actual solvent shape are recorded in

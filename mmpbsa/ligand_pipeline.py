@@ -33,6 +33,7 @@ from .common import (
     model_id,
     mpi_pythonpath,
     parse_simple_mask,
+    pdb_residue_index,
     pdb_id,
     read_json,
     remove_paths,
@@ -887,7 +888,7 @@ def select_interface_waters(system_pdb: Path, ligand_mask: str, count: int) -> l
             continue
         try:
             atom_id = int(line[6:11])
-            resnum = int(line[22:26])
+            resnum = pdb_residue_index(line)
         except ValueError:
             continue
         resname = line[17:20].strip().upper()

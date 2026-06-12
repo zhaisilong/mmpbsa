@@ -169,6 +169,12 @@ RUN_DIR/
 }
 ```
 
+Peptide selected structures may contain common Amber peptide caps or residue
+variants such as `ACE`, `NME`, `NHE`, `NH2`, `CYX`, `CYM`, `ASH`, `GLH`, `HID`,
+`HIE`, `HIP`, and `LYN`. These are retained and normalized to `ATOM` records
+even when the source PDB marks them as `HETATM`; other HETATM records still
+require the explicit peptide `amber_prep.nonstandard_policy: strip` setting.
+
 ## Running
 
 Run one smoke job:

@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import patch
 
 from mmpbsa.analysis import add_dmm
-from mmpbsa.common import aggregate_replica_values, frame_settings, gmx_runtime, load_profile, profile_with_replica_indices, replica_indices, replica_names, replica_seed_map
+from mmpbsa.common import aggregate_replica_values, frame_settings, gmx_runtime, load_profile, profile_with_replica_indices, replica_indices, replica_names, replica_seed_map, residue_atoms
 from mmpbsa.ligand import ligand_input_format, mol2_total_charge, run_ligand_prepare
 from mmpbsa.ligand_amber import tleap_text
 from mmpbsa.ligand_pipeline import infer_dielectric_policy, ligand_replica_ante_mmpbsa_command, mmpbsa_input_text, select_interface_waters
@@ -68,6 +68,19 @@ def peptide_pdb_with_hetatm() -> str:
             "HETATM    4  O1  SO4 A 101       2.500   0.000   0.000  1.00  0.00           O",
             "ATOM      5  N   ALA B   2       3.000   0.000   0.000  1.00  0.00           N",
             "ATOM      6  CA  ALA B   2       4.000   0.000   0.000  1.00  0.00           C",
+            "END",
+        ]
+    ) + "\n"
+
+
+def peptide_pdb_with_amber_hetatm_caps() -> str:
+    return "\n".join(
+        [
+            "ATOM      1  N   GLY A   1       0.000   0.000   0.000  1.00  0.00           N",
+            "ATOM      2  CA  GLY A   1       1.000   0.000   0.000  1.00  0.00           C",
+            "HETATM    3  C   ACE B   2       2.000   0.000   0.000  1.00  0.00           C",
+            "HETATM    4  SG  CYX B   3       3.000   0.000   0.000  1.00  0.00           S",
+            "HETATM    5  N   NH2 B   4       4.000   0.000   0.000  1.00  0.00           N",
             "END",
         ]
     ) + "\n"
@@ -567,6 +580,33 @@ CL- 1
             waters = select_interface_waters(pdb, ":3", 1)
             self.assertEqual(waters[0]["resnum"], 4)
 
+    def test_ligand_explicit_water_selection_handles_extended_pdb_residue_numbers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pdb = Path(tmp) / "system_solvated.pdb"
+            pdb.write_text(
+                "\n".join(
+                    [
+                        "ATOM      1  CA  LEU A   1       0.000   0.000   0.000  1.00  0.00           C",
+                        "HETATM    2  C1  LIG B   3       3.000   0.000   0.000  1.00  0.00           C",
+                        "HETATM    3  O   WAT  1076      30.000   0.000   0.000  1.00  0.00           O",
+                        "HETATM    4  H1  WAT  1076      30.100   0.100   0.000  1.00  0.00           H",
+                        "HETATM    5  H2  WAT  1076      30.100  -0.100   0.000  1.00  0.00           H",
+                        "HETATM    6  O   WAT  10769      3.400   0.000   0.000  1.00  0.00           O",
+                        "HETATM    7  H1  WAT  10769      3.500   0.100   0.000  1.00  0.00           H",
+                        "HETATM    8  H2  WAT  10769      3.500  -0.100   0.000  1.00  0.00           H",
+                        "END",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            waters = select_interface_waters(pdb, ":3", 1)
+            self.assertEqual(waters[0]["resnum"], 10769)
+            self.assertEqual(waters[0]["atom_ids"], [6, 7, 8])
+            atoms = residue_atoms(pdb)
+            self.assertEqual(atoms[1076], [3, 4, 5])
+            self.assertEqual(atoms[10769], [6, 7, 8])
+
     def test_ligand_mmpbsa_input_uses_policy_params(self) -> None:
         profile = load_profile(ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml")
         manifest = {"frame_settings": frame_settings(profile), "dielectric_policy": {"epsilon": 3.0}}
@@ -947,6 +987,33 @@ records:
             self.assertTrue((output_dir / "kras_5xco_mg_pilot_correlations.csv").exists())
             self.assertTrue((output_dir / "kras_5xco_mg_pilot_decision.json").exists())
             self.assertTrue((output_dir / "report_kras_5xco_mg_pilot.html").exists())
+
+    def test_peptide_amber_hetatm_caps_are_retained_as_atom_records(self) -> None:
+        profile = json.loads(json.dumps(load_profile(ROOT / "configs" / "peptide_crystal_3x5ns.yaml")))
+        profile["amber_prep"]["nonstandard_policy"] = "fail"
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "input"
+            input_dir.mkdir()
+            (input_dir / "selected_raw.pdb").write_text(peptide_pdb_with_amber_hetatm_caps(), encoding="utf-8")
+            paths = type("Paths", (), {"input": input_dir})()
+            manifest = {"receptor_chains": "A", "peptide_chains": "B"}
+
+            prepared = peptide_prepare_input_structure(paths, manifest, profile)
+
+            clean = (input_dir / "selected.pdb").read_text(encoding="utf-8")
+            peptide = (input_dir / "selected_peptide.pdb").read_text(encoding="utf-8")
+            self.assertNotIn("HETATM", clean)
+            self.assertIn("ATOM      3  C   ACE B   2", clean)
+            self.assertIn("ATOM      4  SG  CYX B   3", clean)
+            self.assertIn("ATOM      5  N   NH2 B   4", clean)
+            self.assertIn("ACE", peptide)
+            self.assertIn("CYX", peptide)
+            self.assertIn("NH2", peptide)
+            self.assertEqual(prepared["dropped_nonprotein_residue_count"], 0)
+            self.assertEqual(prepared["peptide_residue_count"], 3)
+            self.assertEqual(prepared["peptide_residue_mask"], ":2-4")
+            accepted = prepared["input_residue_findings"]["accepted_hetero_residues"]
+            self.assertEqual([item["resname"] for item in accepted], ["ACE", "CYX", "NH2"])
 
     def test_cli_help(self) -> None:
         if not CLICK_AVAILABLE:

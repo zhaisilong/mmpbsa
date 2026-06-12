@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mmpbsa"
-version = "0.1.5"
+version = "0.1.6"
 description = "Unified protein-peptide and protein-small-molecule MD + MMPBSA pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
