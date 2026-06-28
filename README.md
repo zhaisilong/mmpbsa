@@ -137,6 +137,11 @@ Shared utilities:
 ```bash
 mmpbsa status RUN_DIR
 mmpbsa aggregate RUN_DIR --output-dir OUTPUT_DIR
+mmpbsa visualize job RUN_DIR/demo_ligand --output-dir OUTPUT_DIR/demo_ligand_visual
+mmpbsa visualize run RUN_DIR --output-dir OUTPUT_DIR/run_visual --include-samples
+mmpbsa visualize run RUN_DIR --output-dir OUTPUT_DIR/run_visual_pymol --pymol
+mmpbsa visualize run RUN_DIR --output-dir OUTPUT_DIR/run_visual_movie --pymol --movie
+mmpbsa visualize run RUN_DIR --output-dir OUTPUT_DIR/run_visual_bundle --pymol --zip
 mmpbsa frame-settings --protocol configs/default_15ns.yaml
 mmpbsa doctor --protocol configs/default_15ns.yaml
 ```
@@ -230,6 +235,27 @@ result/summary.csv
 .<step>_done
 ```
 
+Visualization helpers read existing outputs only. They do not rerun MD or
+MMPBSA. `mmpbsa visualize job` writes a per-sample `index.html`, QC audit CSV,
+trajectory QC plot, interaction-contact plot, and MD energy landscape from
+existing analysis and production MD files. `mmpbsa visualize run` creates one
+group `index.html` with a sortable ranking table plus `ranking.csv` and
+`qc_summary.csv`; default ranking is composite: PB, then PB dMM, then GB, then
+GB dMM.
+
+Use `--pymol` to add PyMOL visualization assets to sample reports. This writes
+aligned MMPBSA-window scripts plus full-production trajectories processed with
+`mdtraj` for periodic-boundary imaging and receptor fitting under each sample's
+`pymol/` directory. Install the optional Python dependency with
+`pip install 'mmpbsa[visualize]'` or add `mdtraj` to the mamba environment before
+using full-MD PyMOL assets. Use `--movie` when a rendered `movie.mp4` should be
+attempted; it implies `--pymol` and requires local `pymol` plus `ffmpeg`. Use
+`--zip` or `--archive-name` to create a zip archive of the complete generated
+report directory.
+
+`mmpbsa visualize bundle` remains available as a legacy PyMOL-only selected-job
+bundle, but the recommended portable report path is `visualize run/job --zip`.
+
 Local validation scaffolding is kept outside the core package under
 `validation/`. It is for checking this repository's peptide/ligand behavior, not
 for the public pipeline API. Peptide validation summaries can be regenerated
@@ -245,5 +271,6 @@ python validation/peptide_3x5ns/report.py \
 
 - [Setup guide](docs/setups.md)
 - [Receptor cofactor guide](docs/receptor_cofactors.md)
+- [KRAS 6WGN/GNP-Mg Boltz scaffold](docs/kras_6wgn_boltz.md)
 - [Peptide local validation notes](docs/peptide_3x5ns_mmpbsa.md)
 - [TYK2 ligand 3x5ns validation report](docs/ligand_tyk2_3x5ns_validation.md)

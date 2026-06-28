@@ -475,12 +475,14 @@ run
             )
             write_text_atomic(
                 out / "convert_dry_xtc_to_nc.in",
-                f"""parm {out / "complex.prmtop"}
-trajin {out / "md_prod_dry_center.xtc"}
-autoimage anchor {manifest["receptor_residue_mask"]} fixed :{receptor_first}-{ligand_last}
-trajout {out / "md_prod_dry_center.nc"} netcdf
-run
-""",
+                replica_mmpbsa_convert_text(
+                    out / "complex.prmtop",
+                    out / "md_prod_dry_center.xtc",
+                    out / "md_prod_dry_center.nc",
+                    str(manifest["receptor_residue_mask"]),
+                    f":{receptor_first}-{ligand_last}",
+                    manifest["frame_settings"],
+                ),
             )
             run_logged(mamba_command(self.profile, ["cpptraj", "-i", str(out / "convert_dry_xtc_to_nc.in")]), self.paths.logs / f"cpptraj_dry_convert_{rep_dir.name}.log")
             write_text_atomic(out / "mmpbsa_sanity.in", mmpbsa_input_text(manifest, self.profile, sanity=True))
@@ -527,7 +529,15 @@ run
         receptor_header, receptor_rows = load_cpptraj_table(self.paths.qc / "receptor_bb_rmsd.dat")
         ligand_header, ligand_rows = load_cpptraj_table(self.paths.qc / "ligand_heavy_rmsd_after_receptor_fit.dat")
         contact_header, contact_rows = load_cpptraj_table(self.paths.qc / "native_contacts.dat")
-        write_trajectory_qc_csv(self.paths.qc / "trajectory_qc.csv", receptor_rows, ligand_rows, contact_header, contact_rows)
+        write_trajectory_qc_csv(
+            self.paths.qc / "trajectory_qc.csv",
+            receptor_rows,
+            ligand_rows,
+            contact_header,
+            contact_rows,
+            replica_names=manifest.get("frame_settings", {}).get("replica_names"),
+            frames_per_replica=manifest.get("frame_settings", {}).get("frames_per_replica"),
+        )
         receptor_stats = column_stats(receptor_header, receptor_rows)["receptor_bb"]
         ligand_stats = column_stats(ligand_header, ligand_rows)["ligand_heavy"]
         contact_stats = column_stats(contact_header, contact_rows)
@@ -543,6 +553,19 @@ run
             "native_contacts": contact_stats,
         }
         issues = evaluate_trajectory_qc(summary, self.profile["qc"])
+        summary["replica_qc"] = ligand_replica_qc_summaries(
+            manifest,
+            receptor_header,
+            receptor_rows,
+            ligand_header,
+            ligand_rows,
+            contact_header,
+            contact_rows,
+            self.profile,
+        )
+        for replica in summary["replica_qc"]:
+            for issue in replica["issues"]:
+                issues.append({**issue, "replica": replica["replica"]})
         summary["issues"] = issues
         summary["status"] = "invalid" if any(issue["severity"] == "fail" for issue in issues) else "valid"
         write_json_atomic(self.paths.qc / "summary.json", summary)
@@ -728,6 +751,17 @@ color tv_red, chain B
                 float(self.profile["mmpbsa"]["internal_limit_kcal_mol"]),
                 float(self.profile["mmpbsa"]["internal_std_limit_kcal_mol"]),
             )
+            expected_frames = int(manifest.get("frame_settings", {}).get("frames_per_replica") or 0)
+            parsed_frames = parsed.get("frames")
+            if expected_frames and parsed_frames is not None and int(round(float(parsed_frames))) != expected_frames:
+                audit["issues"].append(
+                    {
+                        "severity": "fail",
+                        "code": "unexpected_mmpbsa_frame_count",
+                        "message": f"MMPBSA used {parsed_frames:g} frames; expected {expected_frames:g} for the configured frame window.",
+                    }
+                )
+                audit["status"] = "invalid"
             entropy = parse_entropy_terms(output)
             values = dict(parsed["values"])
             values.update(entropy)
@@ -811,6 +845,22 @@ def optional_float(value: str | None) -> float | None:
     if text == "":
         return None
     return float(text)
+
+
+def replica_mmpbsa_convert_text(
+    complex_prmtop: Path,
+    input_xtc: Path,
+    output_nc: Path,
+    receptor_mask: str,
+    fixed_mask: str,
+    settings: dict[str, Any],
+) -> str:
+    return f"""parm {complex_prmtop}
+trajin {input_xtc} {int(settings["startframe"])} {int(settings["total_frames"])} {int(settings["interval"])}
+autoimage anchor {receptor_mask} fixed {fixed_mask}
+trajout {output_nc} netcdf
+run
+"""
 
 
 CHARGED_RESIDUES = {"ASP", "GLU", "LYS", "ARG", "HIP"}
@@ -962,6 +1012,47 @@ def add_pb_entropy_corrected(values: dict[str, float]) -> None:
     corrected = pb + entropy
     values["PB_delta_total_entropy_corrected_kcal_mol"] = corrected
     values["PB_delta_total_entropy_corrected_kJ_mol"] = corrected * 4.184
+
+
+def ligand_replica_qc_summaries(
+    manifest: dict[str, Any],
+    receptor_header: list[str],
+    receptor_rows: list[list[float]],
+    ligand_header: list[str],
+    ligand_rows: list[list[float]],
+    contact_header: list[str],
+    contact_rows: list[list[float]],
+    profile: dict[str, Any],
+) -> list[dict[str, Any]]:
+    per_replica = int(manifest.get("frame_settings", {}).get("frames_per_replica") or len(receptor_rows))
+    names = list(manifest.get("frame_settings", {}).get("replica_names") or replica_names(profile) or ["rep01"])
+    seeds = replica_seed_map(profile)
+    summaries: list[dict[str, Any]] = []
+    for idx, name in enumerate(names):
+        start = idx * per_replica
+        end = min(start + per_replica, len(receptor_rows))
+        if start >= len(receptor_rows):
+            continue
+        rec_slice = receptor_rows[start:end]
+        lig_slice = ligand_rows[start:end]
+        contact_slice = contact_rows[start:end]
+        receptor_stats = column_stats(receptor_header, rec_slice)["receptor_bb"]
+        ligand_stats = column_stats(ligand_header, lig_slice)["ligand_heavy"]
+        contact_stats = column_stats(contact_header, contact_slice)
+        summary: dict[str, Any] = {
+            "replica": name,
+            "replica_index": int(str(name).replace("rep", "")) if str(name).replace("rep", "").isdigit() else idx + 1,
+            "seed": seeds.get(name),
+            "frames": len(rec_slice),
+            "receptor_bb_rmsd_angstrom": receptor_stats,
+            "ligand_heavy_rmsd_after_receptor_fit_angstrom": ligand_stats,
+            "native_contacts": contact_stats,
+        }
+        issues = evaluate_trajectory_qc(summary, profile["qc"])
+        summary["issues"] = issues
+        summary["status"] = "invalid" if any(issue["severity"] == "fail" for issue in issues) else "valid"
+        summaries.append(summary)
+    return summaries
 
 
 def mmpbsa_input_text(manifest: dict[str, Any], profile: dict[str, Any], sanity: bool) -> str:

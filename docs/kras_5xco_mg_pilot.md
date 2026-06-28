@@ -1,5 +1,10 @@
 # KRAS 5XCO GDP/Mg Pilot
 
+Historical note: this page documents the 5XCO-derived GDP/GDP+Mg peptide pilot.
+It is not the charge or receptor-state reference for Boltz poses modeled against
+the 6WGN-like KRAS(G12D)-GNP-Mg active state. For those cases, use
+`docs/kras_6wgn_boltz.md`.
+
 This validation case study is for KRAS-GDP cyclic peptide cases where raw
 AF3/no-Mg MM/PBSA ranking remains dominated by peptide charge.
 

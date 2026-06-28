@@ -577,6 +577,8 @@ run
             contact_header,
             contact_rows,
             partner_field="peptide_bb_rmsd_after_receptor_fit_angstrom",
+            replica_names=manifest.get("frame_settings", {}).get("replica_names"),
+            frames_per_replica=manifest.get("frame_settings", {}).get("frames_per_replica"),
         )
         receptor_stats = column_stats(receptor_header, receptor_rows)["receptor_bb"]
         peptide_stats = column_stats(peptide_header, peptide_rows)["peptide_bb"]

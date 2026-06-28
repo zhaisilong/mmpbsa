@@ -15,6 +15,7 @@ from .peptide_pipeline import PeptidePipeline
 from .postprocess_sweep import parse_epsilons, peptide_postprocess_sweep
 from .replica_merge import merge_ligand_replicas, merge_peptide_replicas
 from .runner import DoneFileRunner, apply_env_overrides, discover_job_contexts
+from .visualize import bundle_pymol, visualize_job, visualize_run
 
 
 def protocol_option(function=None, *, default: Path = DEFAULT_PROFILE):
@@ -188,6 +189,139 @@ def aggregate(run_dir: Path, output_dir: Path) -> None:
     click.echo(json.dumps(report, indent=2))
 
 
+@cli.group()
+def visualize() -> None:
+    """Generate lightweight QC plots and portable PyMOL bundles."""
+
+
+@visualize.command("job")
+@click.argument("job_dir", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), required=True, help="Directory for generated HTML/SVG files.")
+@click.option("--pymol", is_flag=True, help="Add PyMOL visualization assets to the report.")
+@click.option("--export-visual", is_flag=True, help="Deprecated alias for --pymol.")
+@click.option("--align/--no-align", default=True, show_default=True, help="Generate aligned visual PDB assets when --export-visual is used.")
+@click.option("--movie-stride", type=click.IntRange(1), default=5, show_default=True, help="Frame stride for aligned trajectory/movie PDB export.")
+@click.option("--movie", is_flag=True, help="Render and include movie.mp4 when local PyMOL and ffmpeg are available. Implies --pymol.")
+@click.option("--render-video", is_flag=True, help="Deprecated alias for --movie.")
+@click.option("--zip", "zip_archive", is_flag=True, help="Zip the complete generated report directory.")
+@click.option("--archive-name", help="Zip filename or stem for the complete generated report. Implies --zip.")
+def visualize_job_cmd(
+    job_dir: Path,
+    output_dir: Path,
+    pymol: bool,
+    export_visual: bool,
+    align: bool,
+    movie_stride: int,
+    movie: bool,
+    render_video: bool,
+    zip_archive: bool,
+    archive_name: str | None,
+) -> None:
+    render_movie = movie or render_video
+    write_pymol = pymol or export_visual or render_movie
+    report = visualize_job(
+        job_dir,
+        output_dir,
+        export_visual=write_pymol,
+        align=align,
+        movie_stride=movie_stride,
+        render_video=render_movie,
+        zip_archive=zip_archive,
+        archive_name=archive_name,
+    )
+    click.echo(json.dumps(report, indent=2))
+
+
+@visualize.command("run")
+@click.argument("run_dir", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), required=True, help="Directory for generated run-level plots.")
+@click.option("--job-id", multiple=True, help="Restrict plotting to selected completed jobs. May be repeated.")
+@click.option("--sort-by", default="composite", show_default=True, help="Ranking order: composite or a numeric result field.")
+@click.option("--limit", type=click.IntRange(1), help="Plot at most this many jobs after sorting/filtering.")
+@click.option("--include-samples", is_flag=True, help="Also write linked per-sample QC reports under OUTPUT_DIR/samples/.")
+@click.option("--include-jobs", is_flag=True, help="Deprecated alias for --include-samples.")
+@click.option("--pymol", is_flag=True, help="Add PyMOL visualization assets to each sample report. Implies --include-samples.")
+@click.option("--export-pymol", is_flag=True, help="Deprecated alias for --pymol.")
+@click.option("--align/--no-align", default=True, show_default=True, help="Generate aligned visual PDB assets when --export-pymol is used.")
+@click.option("--movie-stride", type=click.IntRange(1), default=5, show_default=True, help="Frame stride for aligned trajectory/movie PDB export.")
+@click.option("--movie", is_flag=True, help="Render and include movie.mp4 when local PyMOL and ffmpeg are available. Implies --pymol.")
+@click.option("--render-video", is_flag=True, help="Deprecated alias for --movie.")
+@click.option("--zip", "zip_archive", is_flag=True, help="Zip the complete generated report directory.")
+@click.option("--archive-name", help="Zip filename or stem for the complete generated report. Implies --zip.")
+def visualize_run_cmd(
+    run_dir: Path,
+    output_dir: Path,
+    job_id: tuple[str, ...],
+    sort_by: str,
+    limit: int | None,
+    include_samples: bool,
+    include_jobs: bool,
+    pymol: bool,
+    export_pymol: bool,
+    align: bool,
+    movie_stride: int,
+    movie: bool,
+    render_video: bool,
+    zip_archive: bool,
+    archive_name: str | None,
+) -> None:
+    render_movie = movie or render_video
+    write_pymol = pymol or export_pymol or render_movie
+    report = visualize_run(
+        run_dir,
+        output_dir,
+        job_ids=list(job_id) or None,
+        sort_by=sort_by,
+        limit=limit,
+        include_samples=include_samples or include_jobs or write_pymol,
+        export_pymol=write_pymol,
+        align=align,
+        movie_stride=movie_stride,
+        render_video=render_movie,
+        zip_archive=zip_archive,
+        archive_name=archive_name,
+    )
+    click.echo(json.dumps(report, indent=2))
+
+
+@visualize.command("bundle")
+@click.argument("run_dir", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), required=True, help="Directory for the portable bundle directory.")
+@click.option("--job-id", multiple=True, required=True, help="Job to include in the bundle. May be repeated.")
+@click.option("--zip", "zip_archive", is_flag=True, help="Also create a zip archive. By default only the portable directory is written.")
+@click.option("--archive-name", help="Zip filename or stem. Implies --zip; defaults to pymol_bundle when omitted.")
+@click.option("--snapshots-only", is_flag=True, help="Exclude pymol_trajectory.pdb and package first/mid/last snapshots only.")
+@click.option("--align/--no-align", default=True, show_default=True, help="Generate aligned visual PDB assets using receptor-fit cpptraj alignment.")
+@click.option("--movie-stride", type=click.IntRange(1), default=5, show_default=True, help="Frame stride for aligned trajectory/movie PDB export.")
+@click.option("--keep-plots", is_flag=True, help="Keep duplicate per-job HTML/SVG plot files inside the bundle.")
+@click.option("--render-video", is_flag=True, help="Try to render movie.mp4 when local pymol and ffmpeg are available.")
+def visualize_bundle_cmd(
+    run_dir: Path,
+    output_dir: Path,
+    job_id: tuple[str, ...],
+    archive_name: str | None,
+    zip_archive: bool,
+    snapshots_only: bool,
+    align: bool,
+    movie_stride: int,
+    keep_plots: bool,
+    render_video: bool,
+) -> None:
+    report = bundle_pymol(
+        run_dir,
+        output_dir,
+        job_ids=list(job_id),
+        archive_name=archive_name,
+        zip_archive=zip_archive,
+        snapshots_only=snapshots_only,
+        align=align,
+        movie_stride=movie_stride,
+        keep_plots=keep_plots,
+        render_video=render_video,
+    )
+    click.echo(json.dumps(report, indent=2))
+
+
 @cli.command("frame-settings")
 @protocol_option
 def frame_settings_cmd(protocol_path: Path) -> None:
@@ -226,3 +360,7 @@ def doctor(protocol_path: Path) -> None:
 
 def main() -> None:
     cli()
+
+
+if __name__ == "__main__":
+    main()

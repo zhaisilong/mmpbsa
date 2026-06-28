@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.1.7 - 2026-06-27
+
+- Added a local KRAS 6WGN/GNP-Mg Boltz scaffold that prepares `LIG1` as the
+  scored ligand and `GNP + Mg2+` as receptor cofactors.
+- Documented the active-state charge reference: ligand charge `0`, GNP charge
+  `-4`, Mg charge `+2`, and receptor cofactor net charge `-2`.
+- Fixed ligand per-replica MMPBSA conversion to honor the configured frame
+  window, preventing accidental full-trajectory `0-5 ns` scoring for 3x5ns
+  jobs.
+- Added a strict KRAS Boltz report generator that rejects smoke summaries and
+  requires 10 production jobs with three replicas and 303 total 3-5 ns MMPBSA
+  frames per job.
+- Added `mmpbsa visualize` commands for dependency-light HTML/SVG QC plots,
+  run-level ranking plots, and selected-job portable PyMOL bundles.
+- Refined visualization outputs with run-level `index.html`, optional linked
+  per-job pages, compact plot labels, QC threshold overlays, and bundle indexes.
+- Simplified visualization reports around one sortable group `index.html`,
+  downloadable ranking/QC CSVs, and linked per-sample QC audit pages with
+  optional PyMOL animation assets.
+- Added receptor-aligned visual bundle assets, PyMOL movie scripts, optional
+  local video rendering hooks, and compact bundle defaults.
+- Added mdtraj-based full-production trajectory imaging/fitting for PyMOL
+  reports, interaction-contact plots, and MD potential-vs-binder-RMSD landscape
+  plots.
+- Changed PyMOL bundles to write portable directories by default; zip archives
+  are now opt-in with `--zip` or compatibility `--archive-name`.
+- Marked the 5XCO GDP/Mg pilot as a historical inactive-state pilot so its
+  GDP assumptions are not reused for 6WGN/GNP-Mg Boltz rescoring.
+
 ## v0.1.6 - 2026-06-03
 
 - Fixed peptide input cleanup so common Amber peptide caps and residue variants

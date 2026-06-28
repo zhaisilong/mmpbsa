@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import csv
 import json
+import re
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from mmpbsa.analysis import add_dmm
+from mmpbsa.analysis import add_dmm, write_trajectory_qc_csv
 from mmpbsa.common import aggregate_replica_values, frame_settings, gmx_runtime, load_profile, profile_with_replica_indices, replica_indices, replica_names, replica_seed_map, residue_atoms
 from mmpbsa.ligand import ligand_input_format, mol2_total_charge, run_ligand_prepare
 from mmpbsa.ligand_amber import tleap_text
-from mmpbsa.ligand_pipeline import infer_dielectric_policy, ligand_replica_ante_mmpbsa_command, mmpbsa_input_text, select_interface_waters
+from mmpbsa.ligand_pipeline import infer_dielectric_policy, ligand_replica_ante_mmpbsa_command, mmpbsa_input_text, replica_mmpbsa_convert_text, select_interface_waters
 from mmpbsa.md import EmUnstableError, align_gro_to_top_molecule_order, find_gro_atom_overlaps, mdp_texts
 from mmpbsa.peptide_amber import prepare_input_structure as peptide_prepare_input_structure
 from mmpbsa.peptide_amber import tleap_text_with_cofactors as peptide_tleap_text_with_cofactors
@@ -22,9 +25,14 @@ from mmpbsa.postprocess_sweep import mmpbsa_input_with_epsilon, parse_epsilons, 
 from mmpbsa.metrics import linear_fit, pearson_r, spearman_r
 from mmpbsa.replica_merge import merge_ligand_replicas, merge_peptide_replicas
 from mmpbsa.runner import DoneFileRunner, JobContext, discover_job_contexts
+from mmpbsa.visualize import bundle_pymol, cpptraj_alignment_text, interaction_contact_rows, interaction_contacts_svg, md_energy_basin_rows, md_energy_basin_svg, md_energy_landscape_svg, nice_ticks, trajectory_qc_svg, visualize_job, visualize_run
 from validation.kras_5xco.pilot import CifAtom, PILOT_VARIANTS, peptide_resname_for_amber, variant_peptide_atoms
 from validation.kras_5xco.report import report_kras_5xco_pilot
 from validation.kras_5xco import report as kras_pilot_report_module
+from validation.kras_6wgn_boltz.scaffold import cif_summary as kras_boltz_cif_summary
+from validation.kras_6wgn_boltz.scaffold import job_config as kras_boltz_job_config
+from validation.kras_6wgn_boltz.scaffold import job_id_for_row as kras_boltz_job_id_for_row
+from validation.kras_6wgn_boltz.scaffold import write_strict_3x5ns_report as kras_boltz_write_strict_report
 from validation.ligand_tyk2.scaffold import assign_jobs_to_gpus, experimental_delta_g_kj_mol, load_sdf_records
 
 try:
@@ -57,6 +65,84 @@ def make_context(job_dir: Path) -> JobContext:
         protocol_path=protocol_path,
         protocol=load_profile(protocol_path),
     )
+
+
+def svg_text_values(svg: str) -> list[str]:
+    return [re.sub(r"<[^>]+>", "", value) for value in re.findall(r"<text\b[^>]*>(.*?)</text>", svg, flags=re.S)]
+
+
+def make_visual_job(root: Path, job_id: str, score: float = -10.0, partner_column: str = "ligand_heavy_rmsd_after_receptor_fit_angstrom") -> Path:
+    job_dir = root / job_id
+    (job_dir / "analysis" / "qc").mkdir(parents=True)
+    (job_dir / "analysis" / "structures").mkdir(parents=True)
+    (job_dir / "result").mkdir(parents=True)
+    (job_dir / "analysis" / "qc" / "trajectory_qc.csv").write_text(
+        "\n".join(
+            [
+                f"frame,receptor_bb_rmsd_angstrom,{partner_column},rec_lig[native],rec_lig[mindist]",
+                "1,0.0,0.0,25,2.0",
+                "2,0.5,1.1,20,2.2",
+                "3,0.8,1.4,18,2.4",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    partner_summary_key = partner_column
+    (job_dir / "analysis" / "qc" / "summary.json").write_text(
+        json.dumps(
+            {
+                "job_id": job_id,
+                "frames": 3,
+                "status": "valid",
+                "receptor_bb_rmsd_angstrom": {"mean": 0.43, "max": 0.8},
+                partner_summary_key: {"mean": 0.83, "max": 1.4},
+                "issues": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (job_dir / "result" / "summary.json").write_text(
+        json.dumps(
+            {
+                "job_id": job_id,
+                "name": f"Visual {job_id}",
+                "status": "valid",
+                "trajectory_qc_status": "valid",
+                "mmpbsa_qc_status": "valid",
+                "trajectory_frames": 3,
+                "mmpbsa_frames": 303,
+                "replica_count": 3,
+                "GB_delta_total_kJ_mol": score,
+                "GB_delta_total_kJ_mol_replica_sd": 1.5,
+                "PB_delta_total_kJ_mol": score / 2.0,
+                "GB_dMM_kJ_mol": score - 5.0,
+                "PB_dMM_kJ_mol": score / 2.0 - 3.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (job_dir / "result" / "summary.csv").write_text("job_id,GB_delta_total_kJ_mol\n" f"{job_id},{score}\n", encoding="utf-8")
+    (job_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "job_id": job_id,
+                "profile": {
+                    "qc": {
+                        "receptor_rmsd_fail_angstrom": 5.0,
+                        "ligand_rmsd_warn_angstrom": 10.0,
+                        "peptide_rmsd_warn_angstrom": 10.0,
+                        "native_contacts_fail_min": 1,
+                        "interface_distance_fail_angstrom": 8.0,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    for name in ("first.pdb", "mid.pdb", "last.pdb", "pymol_trajectory.pdb"):
+        (job_dir / "analysis" / "structures" / name).write_text("ATOM      1  CA  GLY A   1       0.000   0.000   0.000  1.00  0.00           C\nEND\n", encoding="utf-8")
+    return job_dir
 
 
 def peptide_pdb_with_hetatm() -> str:
@@ -157,6 +243,375 @@ class CoreTests(unittest.TestCase):
             result = CliRunner().invoke(cli, ["status", str(root), "--job-id", "gdp_params"])
             self.assertNotEqual(result.exit_code, 0)
             self.assertIn("Missing job config", result.output)
+
+    def test_visualize_job_writes_qc_and_score_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            job_dir = make_visual_job(root, "alpha", score=-42.0)
+            report = visualize_job(job_dir, root / "visual_alpha")
+            self.assertEqual(report["job_id"], "alpha")
+            self.assertTrue((root / "visual_alpha" / "index.html").exists())
+            self.assertTrue((root / "visual_alpha" / "qc_metrics.csv").exists())
+            self.assertTrue((root / "visual_alpha" / "trajectory_qc.svg").exists())
+            self.assertTrue((root / "visual_alpha" / "mmpbsa_scores.svg").exists())
+            self.assertFalse((root / "visual_alpha" / "trajectory_qc.html").exists())
+            self.assertFalse((root / "visual_alpha" / "mmpbsa_scores.html").exists())
+            html = (root / "visual_alpha" / "index.html").read_text(encoding="utf-8")
+            metrics = (root / "visual_alpha" / "qc_metrics.csv").read_text(encoding="utf-8")
+            self.assertIn("Receptor backbone RMSD", html)
+            self.assertIn("Ligand heavy RMSD", html)
+            self.assertIn("threshold 5", html)
+            self.assertIn("Native contacts", metrics)
+            qc_svg = (root / "visual_alpha" / "trajectory_qc.svg").read_text(encoding="utf-8")
+            self.assertIn('viewBox="0 0 900', qc_svg)
+            self.assertNotIn('width="900"', qc_svg)
+
+    def test_write_trajectory_qc_csv_adds_replica_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "trajectory_qc.csv"
+
+            write_trajectory_qc_csv(
+                output,
+                [[1, 0.1], [2, 0.2], [3, 0.3], [4, 0.4]],
+                [[1, 1.1], [2, 1.2], [3, 1.3], [4, 1.4]],
+                ["#Frame", "rec_lig[native]"],
+                [[1, 10], [2, 9], [3, 8], [4, 7]],
+                replica_names=["rep01", "rep02"],
+                frames_per_replica=2,
+            )
+
+            with output.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]["replica"], "rep01")
+            self.assertEqual(rows[1]["replica_frame"], "2")
+            self.assertEqual(rows[2]["replica"], "rep02")
+            self.assertEqual(rows[2]["global_frame"], "3")
+
+    def test_visualize_job_writes_replica_aware_qc_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            job_dir = make_visual_job(root, "replica_qc", score=-12.0)
+            (job_dir / "analysis" / "qc" / "trajectory_qc.csv").write_text(
+                "\n".join(
+                    [
+                        "frame,receptor_bb_rmsd_angstrom,ligand_heavy_rmsd_after_receptor_fit_angstrom,rec_lig[native],rec_lig[mindist]",
+                        "1,0.1,1.1,20,2.0",
+                        "2,0.2,1.2,18,2.1",
+                        "3,0.3,2.1,17,2.2",
+                        "4,0.4,2.2,16,2.3",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            manifest = json.loads((job_dir / "manifest.json").read_text(encoding="utf-8"))
+            manifest["frame_settings"] = {"replica_names": ["rep01", "rep02"], "replica_count": 2, "frames_per_replica": 2}
+            (job_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+            visualize_job(job_dir, root / "visual_replica_qc")
+
+            by_replica_path = root / "visual_replica_qc" / "trajectory_qc_by_replica.csv"
+            by_replica = by_replica_path.read_text(encoding="utf-8")
+            with by_replica_path.open(newline="", encoding="utf-8") as handle:
+                by_replica_rows = list(csv.DictReader(handle))
+            qc_metrics = (root / "visual_replica_qc" / "qc_metrics.csv").read_text(encoding="utf-8")
+            qc_svg = (root / "visual_replica_qc" / "trajectory_qc.svg").read_text(encoding="utf-8")
+            self.assertEqual(by_replica_rows[0]["replica"], "rep01")
+            self.assertEqual(by_replica_rows[2]["replica"], "rep02")
+            self.assertEqual(by_replica_rows[2]["replica_frame"], "1")
+            self.assertEqual(by_replica_rows[2]["global_frame"], "3")
+            self.assertIn("rep01", by_replica)
+            self.assertIn("rep02", by_replica)
+            self.assertNotIn("replica,", qc_metrics)
+            self.assertIn('class="replica-trace"', qc_svg)
+            self.assertIn("rep01", qc_svg)
+            self.assertIn("rep02", qc_svg)
+
+    def test_interaction_contacts_keep_replica_identity_for_downsampled_states(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pdb = Path(tmp) / "trajectory.pdb"
+            model = "\n".join(
+                [
+                    "MODEL        {state}",
+                    "ATOM      1  NZ  LYS A   1       0.000   0.000   0.000  1.00  0.00           N",
+                    "ATOM      2  OD1 ASP B   2       0.000   0.000   3.000  1.00  0.00           O",
+                    "ENDMDL",
+                ]
+            )
+            pdb.write_text("\n".join(model.format(state=idx) for idx in range(1, 5)) + "\nEND\n", encoding="utf-8")
+            manifest = {"frame_settings": {"replica_names": ["rep01", "rep02"], "frames_per_replica": 5}}
+
+            rows = interaction_contact_rows(pdb, manifest, stride=2)
+
+            self.assertEqual(rows[0]["state"], 1)
+            self.assertEqual(rows[0]["global_frame"], 1)
+            self.assertEqual(rows[0]["replica"], "rep01")
+            self.assertEqual(rows[2]["replica_frame"], 5)
+            self.assertEqual(rows[3]["global_frame"], 7)
+            self.assertEqual(rows[3]["replica"], "rep02")
+            self.assertEqual(rows[3]["replica_frame"], 2)
+            self.assertGreater(rows[0]["hbond_like_contacts"], 0)
+            self.assertGreater(rows[0]["salt_bridge_like_contacts"], 0)
+
+    def test_nice_ticks_drops_near_duplicate_end_labels(self) -> None:
+        ticks = nice_ticks(0.0, 301.0, max_ticks=8)
+
+        self.assertIn(301.0, ticks)
+        self.assertNotIn(300.0, ticks)
+
+    def test_md_energy_trace_svg_uses_time_axis_and_basin_marker(self) -> None:
+        rows = [
+            {"replica": "rep01", "frame": 3, "time_ps": 2000.0, "binder_rmsd_angstrom": 3.0, "delta_potential_kJ_mol": -10.0},
+            {"replica": "rep01", "frame": 1, "time_ps": 0.0, "binder_rmsd_angstrom": 1.0, "delta_potential_kJ_mol": 0.0},
+            {"replica": "rep01", "frame": 2, "time_ps": 1000.0, "binder_rmsd_angstrom": 2.0, "delta_potential_kJ_mol": -5.0},
+            {"replica": "rep02", "frame": 1, "time_ps": 0.0, "binder_rmsd_angstrom": 1.5, "delta_potential_kJ_mol": -2.0},
+            {"replica": "rep02", "frame": 2, "time_ps": 1000.0, "binder_rmsd_angstrom": 4.0, "delta_potential_kJ_mol": -30.0},
+        ]
+        svg = md_energy_landscape_svg(rows)
+
+        self.assertEqual(svg.count('class="time-trace"'), 4)
+        self.assertIn("Time (ns)", svg)
+        self.assertIn("MD RMSD / potential trace", svg)
+        self.assertIn('class="basin-line"', svg)
+        self.assertIn('class="basin-point"', svg)
+        self.assertIn("Basin rep02 frame 2: 1.00 ns, 4.00 A, -30.00 kJ/mol", svg)
+        self.assertIn("rep01", svg)
+        self.assertIn("rep02", svg)
+
+        basin_svg = md_energy_basin_svg(rows)
+        self.assertEqual(basin_svg.count('class="basin-curve"'), 2)
+        self.assertEqual(basin_svg.count('class="basin-line"'), 2)
+        self.assertEqual(basin_svg.count('class="basin-point"'), 2)
+        self.assertNotIn('class="time-trace"', basin_svg)
+        self.assertNotIn('class="replica-path"', basin_svg)
+        self.assertIn("rep01 1D RMSD basin", basin_svg)
+        self.assertIn("rep02 1D RMSD basin", basin_svg)
+        self.assertIn("Binder RMSD to production start", basin_svg)
+        self.assertIn("Per-replica occupancy-derived free-energy profiles", basin_svg)
+
+        basin_rows = md_energy_basin_rows(rows)
+        self.assertEqual({row["replica"] for row in basin_rows}, {"rep01", "rep02"})
+        self.assertEqual(sum(int(row["is_basin"]) for row in basin_rows if row["replica"] == "rep01"), 1)
+        self.assertEqual(sum(int(row["is_basin"]) for row in basin_rows if row["replica"] == "rep02"), 1)
+
+    def test_visualize_job_writes_replica_basin_csv(self) -> None:
+        rows = [
+            {"replica": "rep01", "frame": 1, "time_ps": 0.0, "binder_rmsd_angstrom": 1.0, "delta_potential_kJ_mol": 0.0},
+            {"replica": "rep01", "frame": 2, "time_ps": 1000.0, "binder_rmsd_angstrom": 1.5, "delta_potential_kJ_mol": -5.0},
+            {"replica": "rep01", "frame": 3, "time_ps": 2000.0, "binder_rmsd_angstrom": 2.0, "delta_potential_kJ_mol": -10.0},
+            {"replica": "rep02", "frame": 1, "time_ps": 0.0, "binder_rmsd_angstrom": 0.8, "delta_potential_kJ_mol": 0.0},
+            {"replica": "rep02", "frame": 2, "time_ps": 1000.0, "binder_rmsd_angstrom": 1.2, "delta_potential_kJ_mol": -6.0},
+            {"replica": "rep02", "frame": 3, "time_ps": 2000.0, "binder_rmsd_angstrom": 1.6, "delta_potential_kJ_mol": -9.0},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            job_dir = make_visual_job(root, "basin_job", score=-12.0)
+            with patch("mmpbsa.visualize.md_energy_landscape_rows", return_value=rows):
+                report = visualize_job(job_dir, root / "visual_basin")
+
+            basin_csv = root / "visual_basin" / "md_energy_basin_by_replica.csv"
+            self.assertTrue(basin_csv.exists())
+            self.assertEqual(report["md_energy_basin_by_replica_csv"], str(basin_csv))
+            with basin_csv.open(newline="", encoding="utf-8") as handle:
+                basin_rows = list(csv.DictReader(handle))
+            self.assertEqual({row["replica"] for row in basin_rows}, {"rep01", "rep02"})
+            self.assertEqual(sum(int(row["is_basin"]) for row in basin_rows if row["replica"] == "rep01"), 1)
+            self.assertEqual(sum(int(row["is_basin"]) for row in basin_rows if row["replica"] == "rep02"), 1)
+            html = (root / "visual_basin" / "index.html").read_text(encoding="utf-8")
+            self.assertIn("Per-replica occupancy-derived 1D RMSD basins", html)
+
+    def test_svg_axis_ticks_use_data_bounds_not_padded_bounds(self) -> None:
+        qc_rows: list[dict[str, Any]] = []
+        for replica_idx, replica in enumerate(["rep01", "rep02", "rep03"], start=1):
+            for frame in range(1, 102):
+                qc_rows.append(
+                    {
+                        "frame": (replica_idx - 1) * 101 + frame,
+                        "global_frame": (replica_idx - 1) * 101 + frame,
+                        "replica": replica,
+                        "replica_frame": frame,
+                        "receptor_bb_rmsd_angstrom": frame * 0.015,
+                        "ligand_heavy_rmsd_after_receptor_fit_angstrom": 1.0 + replica_idx * 0.2 + frame * 0.01,
+                        "rec_lig[native]": 25 - frame * 0.02,
+                        "rec_lig[mindist]": 2.0 + frame * 0.005,
+                    }
+                )
+        qc_svg = trajectory_qc_svg(qc_rows, "Axis test", thresholds={"ligand_heavy_rmsd_after_receptor_fit_angstrom": 10.0})
+        qc_text = svg_text_values(qc_svg)
+        self.assertIn("101", qc_text)
+        self.assertNotIn("-7", qc_text)
+        self.assertNotIn("109", qc_text)
+        self.assertGreaterEqual(qc_svg.count('class="replica-trace"'), 12)
+
+        contacts_svg = interaction_contacts_svg(
+            [
+                {"frame": 1, "global_frame": 1, "replica": "rep01", "replica_frame": 1, "hbond_like_contacts": 2, "salt_bridge_like_contacts": 1},
+                {"frame": 2, "global_frame": 2, "replica": "rep01", "replica_frame": 2, "hbond_like_contacts": 3, "salt_bridge_like_contacts": 1},
+                {"frame": 3, "global_frame": 3, "replica": "rep02", "replica_frame": 1, "hbond_like_contacts": 1, "salt_bridge_like_contacts": 0},
+                {"frame": 4, "global_frame": 4, "replica": "rep02", "replica_frame": 2, "hbond_like_contacts": 2, "salt_bridge_like_contacts": 1},
+            ]
+        )
+        self.assertIn("rep01", contacts_svg)
+        self.assertIn("rep02", contacts_svg)
+        self.assertGreaterEqual(contacts_svg.count('class="replica-trace"'), 4)
+        self.assertIn("solid: H-bond-like", contacts_svg)
+        self.assertIn("dashed: Salt-bridge-like", contacts_svg)
+
+        energy_rows = [
+            {
+                "replica": "rep01",
+                "frame": idx + 1,
+                "time_ps": float(idx * 1000),
+                "binder_rmsd_angstrom": 1.0 + idx * 0.4,
+                "delta_potential_kJ_mol": -200.0 * idx,
+            }
+            for idx in range(6)
+        ]
+        landscape_text = svg_text_values(md_energy_landscape_svg(energy_rows))
+        self.assertNotIn("-0.40", landscape_text)
+        self.assertNotIn("5.40", landscape_text)
+
+        basin_text = svg_text_values(md_energy_basin_svg(energy_rows))
+        self.assertNotIn("-0.18", basin_text)
+
+    def test_visualize_run_writes_sorted_ranking_and_qc(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_visual_job(root, "weak", score=-5.0)
+            make_visual_job(root, "kras6wgn_rank_0001_model_0", score=-50.0)
+            report = visualize_run(root, root / "visual_run", include_samples=True)
+            self.assertEqual(report["jobs"], 2)
+            self.assertTrue(report["include_samples"])
+            ranking = (root / "visual_run" / "ranking.csv").read_text(encoding="utf-8")
+            qc_summary = (root / "visual_run" / "qc_summary.csv").read_text(encoding="utf-8")
+            self.assertLess(ranking.find("kras6wgn_rank_0001_model_0"), ranking.find("weak"))
+            index = (root / "visual_run" / "index.html").read_text(encoding="utf-8")
+            self.assertIn("MMPBSA Group Report", index)
+            self.assertIn("table.sortable", index)
+            self.assertIn("GB score", index)
+            self.assertIn("PB score", index)
+            self.assertIn("Trajectory QC", index)
+            self.assertIn("kJ/mol", index)
+            self.assertIn("Angstrom", index)
+            self.assertIn('class="num sticky-rank"', index)
+            self.assertIn('class="sticky-job job-cell"', index)
+            self.assertIn("<th>QC</th>", index)
+            self.assertNotIn("<th>Status</th><th>Trajectory QC</th><th>MMPBSA QC</th>", index)
+            self.assertIn("samples/kras6wgn_rank_0001_model_0/index.html", index)
+            self.assertIn("GB total", index)
+            self.assertIn("Native contacts mean", index)
+            self.assertIn("native_contacts_mean", qc_summary)
+            self.assertIn("chart-panel", index)
+            self.assertIn("aria-sort", index)
+            self.assertNotIn('width="900" height="390"', index)
+            self.assertFalse((root / "visual_run" / "ranking.html").exists())
+            self.assertFalse((root / "visual_run" / "qc_overview.html").exists())
+            self.assertTrue((root / "visual_run" / "samples" / "kras6wgn_rank_0001_model_0" / "index.html").exists())
+            ranking_svg = (root / "visual_run" / "ranking.svg").read_text(encoding="utf-8")
+            self.assertIn("r0001_m0", ranking_svg)
+
+    def test_visualize_run_default_composite_ranking_prefers_pb(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gb_good = make_visual_job(root, "gb_good_pb_bad", score=-100.0)
+            pb_good = make_visual_job(root, "pb_good", score=-1.0)
+            gb_summary = json.loads((gb_good / "result" / "summary.json").read_text(encoding="utf-8"))
+            gb_summary["PB_delta_total_kJ_mol"] = 50.0
+            (gb_good / "result" / "summary.json").write_text(json.dumps(gb_summary), encoding="utf-8")
+            pb_summary = json.loads((pb_good / "result" / "summary.json").read_text(encoding="utf-8"))
+            pb_summary["PB_delta_total_kJ_mol"] = -100.0
+            (pb_good / "result" / "summary.json").write_text(json.dumps(pb_summary), encoding="utf-8")
+
+            report = visualize_run(root, root / "visual_run")
+
+            self.assertEqual(report["sort_by"], "composite")
+            ranking = (root / "visual_run" / "ranking.csv").read_text(encoding="utf-8")
+            self.assertLess(ranking.find("pb_good"), ranking.find("gb_good_pb_bad"))
+
+    @unittest.skipUnless(CLICK_AVAILABLE, "click is not installed")
+    def test_visualize_run_cli_zip_and_pymol_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_visual_job(root, "alpha", score=-20.0)
+            output_dir = root / "report"
+            result = CliRunner().invoke(cli, ["visualize", "run", str(root), "--output-dir", str(output_dir), "--pymol", "--zip"])
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            report = json.loads(result.output)
+            self.assertTrue(report["zip_archive"])
+            self.assertTrue(Path(report["archive"]).exists())
+            self.assertTrue((output_dir / "samples" / "alpha" / "pymol" / "load_pymol.pml").exists())
+            index = (output_dir / "index.html").read_text(encoding="utf-8")
+            sample_index = (output_dir / "samples" / "alpha" / "index.html").read_text(encoding="utf-8")
+            self.assertNotIn("<h2>Files</h2>", index)
+            self.assertNotIn("<h2>Files</h2>", sample_index)
+            self.assertIn("<h2>PyMOL</h2>", sample_index)
+            with zipfile.ZipFile(report["archive"]) as zf:
+                names = set(zf.namelist())
+            self.assertIn("report/index.html", names)
+            self.assertIn("report/samples/alpha/index.html", names)
+            self.assertIn("report/samples/alpha/pymol/load_pymol.pml", names)
+
+    def test_bundle_pymol_uses_selected_jobs_and_relative_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_visual_job(root, "alpha", score=-20.0)
+            make_visual_job(root, "beta", score=-10.0)
+            report = bundle_pymol(root, root / "bundles", job_ids=["alpha"])
+            bundle_dir = Path(report["bundle_dir"])
+            self.assertTrue((bundle_dir / "jobs" / "alpha" / "load_pymol.pml").exists())
+            self.assertFalse((bundle_dir / "jobs" / "beta").exists())
+            self.assertFalse(report["zip_archive"])
+            self.assertNotIn("archive", report)
+            self.assertFalse((root / "bundles" / "pymol_bundle.zip").exists())
+            pml = (bundle_dir / "jobs" / "alpha" / "load_pymol.pml").read_text(encoding="utf-8")
+            self.assertIn("load structures/pymol_trajectory.pdb", pml)
+            self.assertNotIn(str(root), pml)
+            self.assertTrue((bundle_dir / "jobs" / "alpha" / "movie.pml").exists())
+            self.assertTrue((bundle_dir / "jobs" / "alpha" / "render_video.sh").exists())
+            self.assertTrue((bundle_dir / "jobs" / "alpha" / "bundle_manifest.json").exists())
+            self.assertFalse((bundle_dir / "jobs" / "alpha" / "visual").exists())
+            bundle_index = (bundle_dir / "index.html").read_text(encoding="utf-8")
+            self.assertIn("PyMOL Bundle Index", bundle_index)
+            self.assertIn("jobs/alpha/load_pymol.pml", bundle_index)
+            self.assertIn("movie.pml", bundle_index)
+            zipped = bundle_pymol(root, root / "archives", job_ids=["alpha"], archive_name="alpha_bundle.zip")
+            self.assertTrue(zipped["zip_archive"])
+            self.assertIn("archive", zipped)
+            with zipfile.ZipFile(zipped["archive"]) as zf:
+                names = set(zf.namelist())
+            self.assertIn("alpha_bundle/jobs/alpha/load_pymol.pml", names)
+            self.assertIn("alpha_bundle/jobs/alpha/movie.pml", names)
+            self.assertIn("alpha_bundle/index.html", names)
+            self.assertNotIn("alpha_bundle/jobs/beta/load_pymol.pml", names)
+            zipped_default = bundle_pymol(root, root / "archives_default", job_ids=["alpha"], zip_archive=True)
+            self.assertTrue(zipped_default["zip_archive"])
+            self.assertTrue(Path(zipped_default["archive"]).name == "pymol_bundle.zip")
+
+    def test_cpptraj_alignment_text_fits_receptor_before_output(self) -> None:
+        text = cpptraj_alignment_text(
+            Path("/tmp/complex.prmtop"),
+            Path("/tmp/md.nc"),
+            Path("/tmp/out"),
+            ":1-171@N,CA,C",
+            frames=303,
+            stride=5,
+            snapshots_only=False,
+        )
+        self.assertIn("trajin /tmp/md.nc 1 303 5", text)
+        self.assertIn("reference /tmp/md.nc 1", text)
+        self.assertIn("rms visual_fit :1-171@N,CA,C reference", text)
+        self.assertLess(text.find("rms visual_fit :1-171@N,CA,C reference"), text.find("trajout /tmp/out/aligned_trajectory.raw.pdb pdb multi"))
+        snapshots = cpptraj_alignment_text(
+            Path("/tmp/complex.prmtop"),
+            Path("/tmp/md.nc"),
+            Path("/tmp/out"),
+            ":1-171@N,CA,C",
+            frames=303,
+            stride=5,
+            snapshots_only=True,
+        )
+        self.assertIn("trajin /tmp/md.nc 151 151 1", snapshots)
 
     def test_done_policy_default_resume_and_force(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -627,6 +1082,61 @@ CL- 1
         self.assertNotIn("entropy=1", sanity)
         self.assertNotIn("&nmode", sanity)
 
+    def test_ligand_replica_mmpbsa_convert_applies_frame_window(self) -> None:
+        profile = load_profile(ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml")
+        text = replica_mmpbsa_convert_text(
+            Path("complex.prmtop"),
+            Path("rep01.xtc"),
+            Path("rep01.nc"),
+            ":1-171",
+            ":1-172",
+            frame_settings(profile),
+        )
+        self.assertIn("trajin rep01.xtc 151 251 1", text)
+        self.assertIn("trajout rep01.nc netcdf", text)
+
+    def test_kras_boltz_strict_report_rejects_smoke_frames(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            job_id = "kras6wgn_rank_0987_model_1"
+            (root / "boltz_6wgn_gnp_mg_manifest.json").write_text(
+                json.dumps({"jobs": [{"index": 1, "job_id": job_id, "rank": "987"}]}),
+                encoding="utf-8",
+            )
+            job_dir = root / job_id
+            (job_dir / "result").mkdir(parents=True)
+            (job_dir / "analysis" / "mmpbsa").mkdir(parents=True)
+            (job_dir / "analysis" / "qc").mkdir(parents=True)
+            (job_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "profile": {"protocol": {"production_ns": 0.02, "mmpbsa_start_ns": 0.0}},
+                        "frame_settings": {"startframe": 1, "frames_per_replica": 11},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "result" / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "status": "valid",
+                        "trajectory_qc_status": "valid",
+                        "mmpbsa_qc_status": "valid",
+                        "replica_count": 1,
+                        "frames_per_replica": 11,
+                        "mmpbsa_frames": 11,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "analysis" / "mmpbsa" / "audit.json").write_text(
+                json.dumps({"status": "valid", "frames": 11, "replicas": [{"frames": 11}], "issues": []}),
+                encoding="utf-8",
+            )
+            (job_dir / "analysis" / "qc" / "summary.json").write_text(json.dumps({"status": "valid"}), encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                kras_boltz_write_strict_report(root, root / "reports", expected_jobs=1)
+
     def test_ligand_replica_ante_mmpbsa_uses_selected_complex_input(self) -> None:
         profile = load_profile(ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml")
         command = ligand_replica_ante_mmpbsa_command({"ligand_residue_mask": ":289"}, profile)
@@ -901,6 +1411,75 @@ CL- 1
 
         self.assertEqual({item.resname for item in residue_8}, {"ALA"})
         self.assertEqual([item.atom for item in residue_8], ["N", "CA", "C", "O", "CB"])
+
+    def test_kras_6wgn_boltz_cif_summary(self) -> None:
+        cif_text = """data_model
+#
+loop_
+_atom_site.group_PDB
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.label_alt_id
+_atom_site.label_comp_id
+_atom_site.label_seq_id
+_atom_site.auth_seq_id
+_atom_site.pdbx_PDB_ins_code
+_atom_site.label_asym_id
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+_atom_site.occupancy
+_atom_site.label_entity_id
+_atom_site.auth_asym_id
+_atom_site.auth_comp_id
+_atom_site.B_iso_or_equiv
+_atom_site.pdbx_PDB_model_num
+ATOM 1 N N . ALA 1 1 ? A 0.0 0.0 0.0 1 1 A ALA 10.0 1
+ATOM 2 C CA . ALA 1 1 ? A 1.0 0.0 0.0 1 1 A ALA 10.0 1
+HETATM 3 C C1 . LIG1 . 1 ? L 2.0 0.0 0.0 1 2 L LIG1 10.0 1
+HETATM 4 P PG . GNP . 1 ? G 3.0 0.0 0.0 1 3 G GNP 10.0 1
+HETATM 5 MG MG . MG . 1 ? M 4.0 0.0 0.0 1 4 M MG 10.0 1
+#
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cif = Path(tmp) / "model.cif"
+            cif.write_text(cif_text, encoding="utf-8")
+            summary = kras_boltz_cif_summary(cif)
+
+        self.assertEqual(summary["chains"], ["A", "G", "L", "M"])
+        self.assertEqual(summary["protein_residue_count"], 1)
+        self.assertEqual(summary["ligand_atom_count"], 1)
+        self.assertEqual(summary["gnp_atom_count"], 1)
+        self.assertEqual(summary["mg_atom_count"], 1)
+
+    def test_kras_6wgn_boltz_job_config_uses_gnp_mg_reference(self) -> None:
+        row = {
+            "rank": "987",
+            "representative_model": "rank_0987_model_1",
+            "smiles": "C1CC1",
+            "representative_composite_score": "0.96",
+            "representative_ligand_iptm": "0.94",
+            "pose_cluster_size": "3",
+            "pose_cluster_max_rmsd": "0.98",
+        }
+        job_id = kras_boltz_job_id_for_row(row)
+        config = kras_boltz_job_config(job_id=job_id, row=row)
+
+        self.assertEqual(job_id, "kras6wgn_rank_0987_model_1")
+        self.assertEqual(config["nucleotide_state"], "GNP")
+        self.assertEqual(config["reference_pdb_id"], "6WGN")
+        self.assertEqual(config["ligand_charge"], 0)
+        self.assertEqual(config["gnp_charge"], -4)
+        self.assertEqual(config["mg_charge"], 2)
+        self.assertEqual(config["receptor_cofactor_net_charge"], -2)
+        self.assertEqual(config["receptor_cofactor_files"], "input/gnp.mol2;input/mg.pdb")
+        self.assertEqual(config["receptor_cofactor_residue_count"], 2)
+        self.assertNotIn("GDP", config["source"])
+
+        source_config = kras_boltz_job_config(job_id=job_id, row=row, relative_input_dir="source")
+        self.assertEqual(source_config["complex_pdb"], "source/complex.pdb")
+        self.assertEqual(source_config["receptor_cofactor_files"], "source/gnp.mol2;source/mg.pdb")
 
     def test_postprocess_sweep_ridge_residuals_remove_simple_charge_trend(self) -> None:
         rows = [

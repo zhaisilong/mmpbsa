@@ -211,15 +211,24 @@ def write_trajectory_qc_csv(
     contact_header: list[str],
     contact_rows: list[list[float]],
     partner_field: str = "ligand_heavy_rmsd_after_receptor_fit_angstrom",
+    replica_names: list[str] | None = None,
+    frames_per_replica: int | None = None,
 ) -> None:
     contact_names = contact_header[1:]
     rows: list[dict[str, Any]] = []
+    names = replica_names or []
+    per_replica = int(frames_per_replica or 0)
     for idx, receptor in enumerate(receptor_rows):
         row: dict[str, Any] = {
             "frame": int(receptor[0]),
             "receptor_bb_rmsd_angstrom": receptor[1],
             partner_field: partner_rows[idx][1],
         }
+        if names and per_replica > 0:
+            replica_idx = min(idx // per_replica, len(names) - 1)
+            row["replica"] = names[replica_idx]
+            row["replica_frame"] = idx - replica_idx * per_replica + 1
+            row["global_frame"] = idx + 1
         for name_idx, name in enumerate(contact_names, start=1):
             row[name] = contact_rows[idx][name_idx]
         rows.append(row)

@@ -1,8 +1,8 @@
 # Receptor Cofactors In MMPBSA
 
-Some targets need a bound cofactor to define the receptor state. KRAS-GDP is the
-canonical case: GDP is not the ligand being scored, but part of the background
-receptor state.
+Some targets need a bound cofactor to define the receptor state. KRAS nucleotide
+state is the canonical case: GDP, GTP analogs such as GNP/GppNHp, and Mg2+ are
+not the ligand being scored, but part of the background receptor state.
 
 Use this partition when scoring a peptide or small molecule bound to a
 GDP-loaded target:
@@ -17,6 +17,15 @@ If a metal ion stabilizes the cofactor, include it with the receptor too:
 
 ```text
 Receptor = Protein + GDP + Mg2+
+```
+
+For active-state KRAS modeled against 6WGN-like GNP/GppNHp, use the same
+partition with GNP:
+
+```text
+Complex  = Protein + GNP + Mg2+ + ligand
+Receptor = Protein + GNP + Mg2+
+Ligand   = ligand
 ```
 
 This is equivalent to the multicomponent receptor pattern in gmx_MMPBSA, where
@@ -52,7 +61,7 @@ protein receptor, receptor cofactors, ligand
 That order keeps the receptor residue mask contiguous and leaves the ligand mask
 as the final residue range.
 
-## GDP Parameters
+## GDP And GNP Parameters
 
 Do not rely on GDP being a standard Amber protein residue. Use validated cofactor
 parameters whenever possible. A practical public source is the Manchester/Bryce
@@ -66,9 +75,16 @@ Load those files with `loadamberprep` and `loadamberparams` in tleap. The
 pipeline accepts `.prep` and `.prepi` files in `receptor_cofactor_libs`, and
 `.frcmod` files in `receptor_cofactor_frcmods`.
 
+GNP/GppNHp should be parameterized explicitly as a receptor cofactor. In the
+local KRAS 6WGN/GNP-Mg Boltz scaffold, GNP is prepared as `gnp.mol2` plus
+`gnp.frcmod`, with total charge normalized to `-4`; Mg is included as a separate
+`mg.pdb` cofactor with charge `+2`. The receptor cofactor net charge is therefore
+`-2`.
+
 Antechamber/GAFF parameterization is acceptable only as an exploratory fallback
-for GDP-like highly charged cofactors. Production calculations should record the
-parameter source, total charge, and any missing-parameter warnings.
+for GDP/GNP-like highly charged cofactors. Production calculations should record
+the parameter source, charge method, total charge, and any missing-parameter
+warnings.
 
 ## References
 
