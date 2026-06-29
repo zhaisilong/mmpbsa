@@ -32,6 +32,10 @@ from validation.kras_5xco import report as kras_pilot_report_module
 from validation.kras_6wgn_boltz.scaffold import cif_summary as kras_boltz_cif_summary
 from validation.kras_6wgn_boltz.scaffold import job_config as kras_boltz_job_config
 from validation.kras_6wgn_boltz.scaffold import job_id_for_row as kras_boltz_job_id_for_row
+from validation.kras_6wgn_boltz.scaffold import make_boltz_jobs_from_cifs as kras_boltz_make_jobs_from_cifs
+from validation.kras_6wgn_boltz.scaffold import make_boltz_jobs_from_iptm_manifest as kras_boltz_make_jobs_from_iptm_manifest
+from validation.kras_6wgn_boltz.scaffold import preflight_iptm_manifest as kras_boltz_preflight_iptm_manifest
+from validation.kras_6wgn_boltz.scaffold import strict_report_markdown as kras_boltz_strict_report_markdown
 from validation.kras_6wgn_boltz.scaffold import write_strict_3x5ns_report as kras_boltz_write_strict_report
 from validation.ligand_tyk2.scaffold import assign_jobs_to_gpus, experimental_delta_g_kj_mol, load_sdf_records
 
@@ -113,11 +117,15 @@ def make_visual_job(root: Path, job_id: str, score: float = -10.0, partner_colum
                 "trajectory_frames": 3,
                 "mmpbsa_frames": 303,
                 "replica_count": 3,
+                "frames_per_replica": 101,
                 "GB_delta_total_kJ_mol": score,
                 "GB_delta_total_kJ_mol_replica_sd": 1.5,
                 "PB_delta_total_kJ_mol": score / 2.0,
+                "PB_delta_total_kJ_mol_replica_sd": 2.5,
                 "GB_dMM_kJ_mol": score - 5.0,
+                "GB_dMM_kJ_mol_replica_sd": 3.5,
                 "PB_dMM_kJ_mol": score / 2.0 - 3.0,
+                "PB_dMM_kJ_mol_replica_sd": 4.5,
             }
         ),
         encoding="utf-8",
@@ -170,6 +178,37 @@ def peptide_pdb_with_amber_hetatm_caps() -> str:
             "END",
         ]
     ) + "\n"
+
+
+def minimal_boltz_cif() -> str:
+    headers = [
+        "_atom_site.group_PDB",
+        "_atom_site.id",
+        "_atom_site.type_symbol",
+        "_atom_site.label_atom_id",
+        "_atom_site.label_alt_id",
+        "_atom_site.label_comp_id",
+        "_atom_site.label_seq_id",
+        "_atom_site.auth_seq_id",
+        "_atom_site.pdbx_PDB_ins_code",
+        "_atom_site.label_asym_id",
+        "_atom_site.auth_asym_id",
+        "_atom_site.Cartn_x",
+        "_atom_site.Cartn_y",
+        "_atom_site.Cartn_z",
+        "_atom_site.occupancy",
+        "_atom_site.B_iso_or_equiv",
+        "_atom_site.auth_comp_id",
+        "_atom_site.auth_atom_id",
+        "_atom_site.pdbx_PDB_model_num",
+    ]
+    rows = [
+        "ATOM 1 C CA . MET 1 1 ? A A 0.0 0.0 0.0 1.0 10.0 MET CA 1",
+        "HETATM 2 C C1 . LIG1 1 1 ? L L 1.0 0.0 0.0 1.0 10.0 LIG1 C1 1",
+        "HETATM 3 C C1 . GNP 1 1 ? G G 2.0 0.0 0.0 1.0 10.0 GNP C1 1",
+        "HETATM 4 MG MG . MG 1 1 ? M M 3.0 0.0 0.0 1.0 10.0 MG MG 1",
+    ]
+    return "data_model\n#\nloop_\n" + "\n".join(headers + rows) + "\n#\n"
 
 
 class FakeRunner(DoneFileRunner):
@@ -253,7 +292,7 @@ class CoreTests(unittest.TestCase):
             self.assertTrue((root / "visual_alpha" / "index.html").exists())
             self.assertTrue((root / "visual_alpha" / "qc_metrics.csv").exists())
             self.assertTrue((root / "visual_alpha" / "trajectory_qc.svg").exists())
-            self.assertTrue((root / "visual_alpha" / "mmpbsa_scores.svg").exists())
+            self.assertFalse((root / "visual_alpha" / "mmpbsa_scores.svg").exists())
             self.assertFalse((root / "visual_alpha" / "trajectory_qc.html").exists())
             self.assertFalse((root / "visual_alpha" / "mmpbsa_scores.html").exists())
             html = (root / "visual_alpha" / "index.html").read_text(encoding="utf-8")
@@ -498,7 +537,14 @@ class CoreTests(unittest.TestCase):
             self.assertIn("<th>QC</th>", index)
             self.assertNotIn("<th>Status</th><th>Trajectory QC</th><th>MMPBSA QC</th>", index)
             self.assertIn("samples/kras6wgn_rank_0001_model_0/index.html", index)
-            self.assertIn("GB total", index)
+            self.assertIn("Best", index)
+            self.assertIn('class="badge best"', index)
+            self.assertIn("3 x 101 = 303", index)
+            self.assertIn('data-sort="303"', index)
+            self.assertIn("GB mean", index)
+            self.assertIn("GB replica SD", index)
+            self.assertIn("PB mean", index)
+            self.assertIn("PB replica SD", index)
             self.assertIn("Native contacts mean", index)
             self.assertIn("native_contacts_mean", qc_summary)
             self.assertIn("chart-panel", index)
@@ -1095,6 +1141,97 @@ CL- 1
         self.assertIn("trajin rep01.xtc 151 251 1", text)
         self.assertIn("trajout rep01.nc netcdf", text)
 
+    def test_kras_boltz_make_jobs_from_cifs_requires_manifest_smiles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cif_dir = root / "cifs"
+            cif_dir.mkdir()
+            (cif_dir / "rank_0122_model_1.cif").write_text(minimal_boltz_cif(), encoding="utf-8")
+            manifest = root / "md_selected_manifest.csv"
+            manifest.write_text("rank,representative_model,smiles\n122,rank_0122_model_1,\n", encoding="utf-8")
+
+            with self.assertRaises(SystemExit):
+                kras_boltz_make_jobs_from_cifs(cif_dir, manifest, root / "run", prepare_inputs=False)
+
+    def test_kras_boltz_make_jobs_from_cifs_writes_3x15_scaffold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cif_dir = root / "cifs"
+            cif_dir.mkdir()
+            (cif_dir / "rank_0122_model_1.cif").write_text(minimal_boltz_cif(), encoding="utf-8")
+            manifest = root / "md_selected_manifest.csv"
+            manifest.write_text(
+                "rank,representative_model,smiles,representative_composite_score\n"
+                "122,rank_0122_model_1,CCO,0.9\n",
+                encoding="utf-8",
+            )
+
+            report = kras_boltz_make_jobs_from_cifs(cif_dir, manifest, root / "run", prepare_inputs=False)
+
+            self.assertEqual(report["production_protocol"], "configs/ligand_crystal_3x15ns_mmpbsa_bcc.yaml")
+            self.assertEqual(report["job_count"], 1)
+            job_id = "kras6wgnb2_rank_0122_model_1"
+            config = json.loads((root / "run" / job_id / f"{job_id}.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["job_id"], job_id)
+            self.assertEqual(config["boltz_smiles"], "CCO")
+            self.assertEqual(config["input_preparation"]["status"], "skipped")
+            run_script = (root / "run" / "run_top10_3x15ns.sh").read_text(encoding="utf-8")
+            self.assertIn("configs/ligand_crystal_3x15ns_mmpbsa_bcc.yaml", run_script)
+            self.assertTrue((root / "run" / "boltz2_6wgn_gnp_mg_manifest.json").exists())
+
+    def test_kras_boltz_iptm_preflight_reports_missing_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / "md_selected_iptm_only_manifest.csv"
+            manifest.write_text(
+                "set,selection_rank,rank,name,model,iptm,kras_kd_pred,kd,kd_log10_nM_from_M,cif_path,prediction_dir\n"
+                "primary,1,316,PP0316,PP0316_model_0,0.93,-1.2,5e-11,-1.3,missing/PP0316_model_0.cif,missing\n",
+                encoding="utf-8",
+            )
+
+            report = kras_boltz_preflight_iptm_manifest(manifest)
+
+            self.assertFalse(report["passed"])
+            self.assertIn("PP0316_model_0", report["failures"][0])
+            self.assertIn("missing CIF path", report["failures"][0])
+            self.assertIn("missing ligand topology", report["failures"][0])
+
+    def test_kras_boltz_make_jobs_from_iptm_manifest_writes_worker_script(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cif_dir = root / "cifs"
+            cif_dir.mkdir()
+            cif = cif_dir / "rank_0892_model_6.cif"
+            cif.write_text(minimal_boltz_cif(), encoding="utf-8")
+            manifest = root / "md_selected_iptm_only_manifest.csv"
+            manifest.write_text(
+                "set,selection_rank,rank,name,model,iptm,kras_kd_pred,kd,kd_log10_nM_from_M,cif_path,prediction_dir\n"
+                "primary,1,892,rank_0892,rank_0892_model_6,0.93,-1.2,5e-11,-1.3,missing/rank_0892_model_6.cif,predictions/rank_0892\n",
+                encoding="utf-8",
+            )
+            smiles_manifest = root / "old_smiles.csv"
+            smiles_manifest.write_text("rank,name,representative_model,smiles\n892,rank_0892,rank_0892_model_0,CCO\n", encoding="utf-8")
+
+            report = kras_boltz_make_jobs_from_iptm_manifest(
+                manifest,
+                root / "run",
+                local_cif_dir=cif_dir,
+                smiles_manifest=smiles_manifest,
+                prepare_inputs=False,
+            )
+
+            self.assertEqual(report["job_count"], 1)
+            self.assertEqual(report["production_protocol"], "configs/ligand_crystal_3x15ns_mmpbsa_bcc.yaml")
+            job_id = "kras6wgnb2_rank_0892_model_6"
+            config = json.loads((root / "run" / job_id / f"{job_id}.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["job_id"], job_id)
+            self.assertEqual(config["selection_rank"], "1")
+            self.assertEqual(config["boltz2_id"], "rank_0892")
+            self.assertEqual(config["boltz_smiles"], "CCO")
+            worker_script = (root / "run" / "run_top10_3x15ns_gpu_workers.sh").read_text(encoding="utf-8")
+            self.assertIn("GPUS:-4,5,6,7", worker_script)
+            self.assertIn("--protocol \"$PROTOCOL\" --resume", worker_script)
+
     def test_kras_boltz_strict_report_rejects_smoke_frames(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1136,6 +1273,95 @@ CL- 1
             (job_dir / "analysis" / "qc" / "summary.json").write_text(json.dumps({"status": "valid"}), encoding="utf-8")
             with self.assertRaises(SystemExit):
                 kras_boltz_write_strict_report(root, root / "reports", expected_jobs=1)
+
+    def test_kras_boltz_strict_report_accepts_3x15_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            job_id = "kras6wgnb2_rank_0122_model_1"
+            (root / "boltz2_6wgn_gnp_mg_manifest.json").write_text(
+                json.dumps({"jobs": [{"index": 1, "job_id": job_id, "rank": "122"}]}),
+                encoding="utf-8",
+            )
+            job_dir = root / job_id
+            (job_dir / "result").mkdir(parents=True)
+            (job_dir / "analysis" / "mmpbsa").mkdir(parents=True)
+            (job_dir / "analysis" / "qc").mkdir(parents=True)
+            (job_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "profile": {"protocol": {"production_ns": 15.0, "mmpbsa_start_ns": 5.0}},
+                        "frame_settings": {"startframe": 251, "frames_per_replica": 501},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "result" / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "status": "valid",
+                        "trajectory_qc_status": "valid",
+                        "mmpbsa_qc_status": "valid",
+                        "replica_count": 3,
+                        "frames_per_replica": 501,
+                        "mmpbsa_frames": 1503,
+                        "GB_delta_total_kJ_mol": -100.0,
+                        "PB_delta_total_kJ_mol": -50.0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "analysis" / "mmpbsa" / "audit.json").write_text(
+                json.dumps({"status": "valid", "frames": 1503, "replicas": [{"frames": 501}, {"frames": 501}, {"frames": 501}], "issues": []}),
+                encoding="utf-8",
+            )
+            (job_dir / "analysis" / "qc" / "summary.json").write_text(json.dumps({"status": "valid"}), encoding="utf-8")
+
+            report = kras_boltz_write_strict_report(root, root / "reports", profile_name="3x15ns", expected_jobs=1)
+
+            self.assertTrue(report["strict_pass"])
+            self.assertEqual(report["mmpbsa_window"], "5-15 ns")
+            markdown = (root / "reports" / "report.md").read_text(encoding="utf-8")
+            self.assertIn("Strict 3x15 ns Report", markdown)
+            self.assertIn("3 x 501 = 1503", markdown)
+
+    def test_kras_boltz_strict_report_uses_replica_frame_labels(self) -> None:
+        report = {
+            "generated_at": "2026-01-01T00:00:00Z",
+            "run_dir": "/tmp/run",
+            "production_jobs": 1,
+            "smoke_jobs_included": 0,
+            "md_protocol": "3x5ns",
+            "mmpbsa_window": "3-5 ns",
+            "expected_replicas": 3,
+            "expected_frames_per_replica": 101,
+            "expected_frames_per_job": 303,
+            "strict_pass": True,
+        }
+        rows = [
+            {
+                "GB_primary_rank": 1,
+                "boltz_rank": 1,
+                "job_id": "kras6wgn_rank_0001_model_0",
+                "GB_delta_total_kJ_mol": -100.0,
+                "GB_delta_total_kJ_mol_replica_sd": 5.0,
+                "PB_delta_total_kJ_mol": -50.0,
+                "PB_delta_total_kJ_mol_replica_sd": 3.0,
+                "replica_count": 3,
+                "frames_per_replica": 101,
+                "mmpbsa_frames": 303,
+                "strict_3_5ns_mmpbsa": True,
+                "replica_frames": "101;101;101",
+                "audit_issue_count": 0,
+                "strict_issues": "",
+            }
+        ]
+
+        markdown = kras_boltz_strict_report_markdown(report, rows, rows)
+
+        self.assertIn("Expected frames/job: 3 x 101 = 303", markdown)
+        self.assertIn("GB mean kJ/mol", markdown)
+        self.assertIn("PB replica SD", markdown)
+        self.assertIn("| 1 | 1 | `kras6wgn_rank_0001_model_0` | -100.00 | 5.00 | -50.00 | 3.00 | 3 x 101 = 303 | pass |", markdown)
 
     def test_ligand_replica_ante_mmpbsa_uses_selected_complex_input(self) -> None:
         profile = load_profile(ROOT / "configs" / "ligand_crystal_3x5ns_mmpbsa_bcc.yaml")

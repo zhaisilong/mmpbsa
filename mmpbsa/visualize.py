@@ -43,16 +43,16 @@ COMPOSITE_SORT_FIELDS = [
 ]
 FIELD_LABELS = {
     COMPOSITE_SORT: "PB > PB dMM > GB > GB dMM",
-    "GB_delta_total_kJ_mol": "GB total",
-    "PB_delta_total_kJ_mol": "PB total",
-    "GB_dMM_kJ_mol": "GB dMM",
-    "PB_dMM_kJ_mol": "PB dMM",
-    "GB_delta_total_kJ_mol_replica_sd": "GB SD",
-    "PB_delta_total_kJ_mol_replica_sd": "PB SD",
-    "GB_dMM_kJ_mol_replica_sd": "GB dMM SD",
-    "PB_dMM_kJ_mol_replica_sd": "PB dMM SD",
-    "GB_delta_total_kcal_mol": "GB total",
-    "PB_delta_total_kcal_mol": "PB total",
+    "GB_delta_total_kJ_mol": "GB mean",
+    "PB_delta_total_kJ_mol": "PB mean",
+    "GB_dMM_kJ_mol": "GB dMM mean",
+    "PB_dMM_kJ_mol": "PB dMM mean",
+    "GB_delta_total_kJ_mol_replica_sd": "GB replica SD",
+    "PB_delta_total_kJ_mol_replica_sd": "PB replica SD",
+    "GB_dMM_kJ_mol_replica_sd": "GB dMM replica SD",
+    "PB_dMM_kJ_mol_replica_sd": "PB dMM replica SD",
+    "GB_delta_total_kcal_mol": "GB mean",
+    "PB_delta_total_kcal_mol": "PB mean",
 }
 RUN_TABLE_FIELDS = [
     "GB_delta_total_kJ_mol",
@@ -68,19 +68,19 @@ RUN_TABLE_GROUPS = [
     (
         "PB score",
         [
-            ("PB_delta_total_kJ_mol", "PB total", "kJ/mol", ""),
-            ("PB_delta_total_kJ_mol_replica_sd", "PB SD", "kJ/mol", "sd"),
-            ("PB_dMM_kJ_mol", "PB dMM", "kJ/mol", ""),
-            ("PB_dMM_kJ_mol_replica_sd", "PB dMM SD", "kJ/mol", "sd"),
+            ("PB_delta_total_kJ_mol", "PB mean", "kJ/mol", ""),
+            ("PB_delta_total_kJ_mol_replica_sd", "PB replica SD", "kJ/mol", "sd"),
+            ("PB_dMM_kJ_mol", "PB dMM mean", "kJ/mol", ""),
+            ("PB_dMM_kJ_mol_replica_sd", "PB dMM replica SD", "kJ/mol", "sd"),
         ],
     ),
     (
         "GB score",
         [
-            ("GB_delta_total_kJ_mol", "GB total", "kJ/mol", ""),
-            ("GB_delta_total_kJ_mol_replica_sd", "GB SD", "kJ/mol", "sd"),
-            ("GB_dMM_kJ_mol", "GB dMM", "kJ/mol", ""),
-            ("GB_dMM_kJ_mol_replica_sd", "GB dMM SD", "kJ/mol", "sd"),
+            ("GB_delta_total_kJ_mol", "GB mean", "kJ/mol", ""),
+            ("GB_delta_total_kJ_mol_replica_sd", "GB replica SD", "kJ/mol", "sd"),
+            ("GB_dMM_kJ_mol", "GB dMM mean", "kJ/mol", ""),
+            ("GB_dMM_kJ_mol_replica_sd", "GB dMM replica SD", "kJ/mol", "sd"),
         ],
     ),
     (
@@ -130,12 +130,7 @@ def visualize_job(
     write_text_atomic(out / "trajectory_qc.svg", qc_svg)
 
     score_paths: dict[str, str] = {}
-    score_svg = score_bar_svg(summary, title)
-    if score_svg:
-        write_text_atomic(out / "mmpbsa_scores.svg", score_svg)
-        score_paths = {
-            "mmpbsa_scores_svg": str(out / "mmpbsa_scores.svg"),
-        }
+    score_svg = ""
     visual_paths: dict[str, Any] = {}
     if export_visual:
         visual_record = copy_job_bundle_files(job, out / "pymol", snapshots_only=False, align=align, movie_stride=movie_stride, render_video=render_video)
@@ -1311,6 +1306,7 @@ def ranking_row(row: dict[str, Any], sort_by: str) -> dict[str, Any]:
         "status": row.get("status", ""),
         "mmpbsa_qc_status": row.get("mmpbsa_qc_status", ""),
         "replica_count": row.get("replica_count", ""),
+        "frames_per_replica": row.get("frames_per_replica", ""),
         "mmpbsa_frames": row.get("mmpbsa_frames", ""),
     }
     if sort_by != COMPOSITE_SORT:
@@ -1924,10 +1920,13 @@ def run_index_html(
     valid_count = sum(1 for row in rows if str(row.get("status") or "") == "valid")
     invalid_count = len(rows) - valid_count
     generated_at = utc_now()
+    best_job_id = str(ranking_rows[0].get("job_id") or "") if ranking_rows else ""
+    best_summary = row_by_job.get(best_job_id, {})
     summary_items = {
         "Run": run_dir.name,
         "Generated": generated_at,
         "Jobs": f"{len(rows)} total / {valid_count} valid / {invalid_count} invalid",
+        "Best": best_summary_label(best_job_id, best_summary, sort_by),
         "Sort": pretty_field_label(sort_by),
         "MMPBSA window": run_frame_window_label(run_dir, rows),
         "MD settings": run_protocol_label(run_dir, rows),
@@ -1942,6 +1941,8 @@ def run_index_html(
         mmpbsa_status = str(summary.get("mmpbsa_qc_status") or "")
         job_link = f"samples/{url_component(job_id)}/index.html" if include_samples else ""
         job_cell = f'<a href="{escape(job_link)}">{escape(job_id)}</a>' if job_link else f"<code>{escape(job_id)}</code>"
+        if rank == 1:
+            job_cell = f'{job_cell} <span class="badge best">best</span>'
         score_cells = []
         for _, fields in RUN_TABLE_GROUPS[:2]:
             for field, _, _, klass in fields:
@@ -1959,7 +1960,7 @@ def run_index_html(
             f"{sortable_cell(rank, classes='sticky-rank')}"
             f"{plain_cell(job_cell, classes='sticky-job job-cell')}"
             f"{qc_status_cell(status, traj_status, mmpbsa_status)}"
-            f"{sortable_cell(summary.get('mmpbsa_frames'))}"
+            f"{frames_cell(summary)}"
             f"{''.join(score_cells)}"
             f"{''.join(qc_cells)}"
             "</tr>"
@@ -2132,7 +2133,7 @@ def base_css() -> str:
         ".meta-strip{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:stretch}.meta-item{display:flex;gap:7px;align-items:baseline;border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:#fbfcfe;min-height:34px}.meta-item b{font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.02em}.meta-item span{font-size:13px;font-weight:650;color:#1f2937}"
         ".action-row{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}.actions{display:flex;flex-wrap:wrap;gap:8px}.action-link{display:inline-flex;align-items:center;height:32px;padding:0 10px;border:1px solid #c9d6f5;border-radius:6px;background:#eff4ff}.compact-note{flex-basis:100%;margin:0}.movie-player{flex-basis:100%;width:100%;max-width:920px;margin:4px auto 0;border:1px solid var(--line);border-radius:8px;background:#000}.svg-img{display:block;width:100%;max-width:920px;height:auto}"
         ".charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}.chart-panel{min-width:0;border:1px solid var(--line);border-radius:8px;padding:12px;background:#fff}section svg{width:100%;height:auto;max-width:900px;display:block}.plot-section svg,.plot-section .svg-img{margin-left:auto;margin-right:auto}"
-        ".badge{display:inline-block;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700;background:#e5e7eb;color:#374151}.muted{color:var(--muted)}"
+        ".badge{display:inline-block;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700;background:#e5e7eb;color:#374151}.badge.best{margin-left:6px;background:#dbeafe;color:#1d4ed8}.muted{color:var(--muted)}"
         ".valid,.aligned,.rendered{background:#dcfce7;color:#166534}.invalid,.fail,.failed{background:#fee2e2;color:#991b1b}.warn,.warning{background:#fef3c7;color:#92400e}.skipped,.not_requested{background:#e0f2fe;color:#075985}"
         "iframe{width:100%;height:440px;border:1px solid var(--line);border-radius:8px;margin:10px 0;background:#fff}"
         "@media print{body{background:#fff}body:before{display:none}body>h1,body>section{max-width:none;margin:0 0 12px;padding-left:0;padding-right:0}section{box-shadow:none;border-color:#cfd6e4;break-inside:avoid}.wide{overflow:visible;white-space:normal}.sticky-rank,.sticky-job{position:static;box-shadow:none}th{position:static}.chart-panel{break-inside:avoid}}"
@@ -2290,6 +2291,43 @@ def sortable_cell(value: Any, *, classes: str = "") -> str:
     sort_value = cell_sort_value(value)
     klass = class_attr("num" if numeric(value) is not None else "", classes)
     return f'<td{klass} data-sort="{escape(sort_value)}">{format_cell(value)}</td>'
+
+
+def sortable_display_cell(display: str, sort_value: Any, *, classes: str = "") -> str:
+    klass = class_attr("num" if numeric(sort_value) is not None else "", classes)
+    return f'<td{klass} data-sort="{escape(cell_sort_value(sort_value))}">{escape(display)}</td>'
+
+
+def frames_cell(summary: dict[str, Any]) -> str:
+    return sortable_display_cell(frame_count_label(summary), numeric(summary.get("mmpbsa_frames")) or "", classes="frames-cell")
+
+
+def frame_count_label(summary: dict[str, Any]) -> str:
+    total = numeric(summary.get("mmpbsa_frames") or summary.get("mmpbsa_frames_total"))
+    replicas = numeric(summary.get("replica_count"))
+    per_replica = numeric(summary.get("frames_per_replica"))
+    if replicas is not None and replicas > 1 and per_replica is not None:
+        expected = int(round(replicas * per_replica))
+        prefix = f"{int(replicas)} x {int(per_replica)}"
+        if total is None:
+            return prefix
+        total_int = int(round(total))
+        if expected == total_int:
+            return f"{prefix} = {total_int}"
+        return f"{prefix} != {total_int}"
+    if total is not None:
+        return format_cell(total)
+    return ""
+
+
+def best_summary_label(job_id: str, summary: dict[str, Any], sort_by: str) -> str:
+    if not job_id:
+        return ""
+    score_field = COMPOSITE_SORT_FIELDS[0] if sort_by == COMPOSITE_SORT else sort_by
+    value = numeric(summary.get(score_field))
+    if value is None:
+        return job_id
+    return f"{job_id} ({pretty_field_label(score_field)} {format_cell(value)} kJ/mol)"
 
 
 def plain_cell(html_text: str, *, classes: str = "", title: str = "") -> str:

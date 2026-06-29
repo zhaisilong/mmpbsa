@@ -12,6 +12,14 @@
 - Added a strict KRAS Boltz report generator that rejects smoke summaries and
   requires 10 production jobs with three replicas and 303 total 3-5 ns MMPBSA
   frames per job.
+- Added a Boltz2 CIF-directory scaffold for the KRAS 6WGN/GNP-Mg top10 set,
+  requiring a SMILES manifest instead of inferring ligand bonds from CIF
+  coordinates.
+- Added Boltz2 iPTM-only manifest preflight/staging commands for PP-style
+  selections, with explicit CIF/topology validation before any tmux production
+  run is launched.
+- Extended the strict KRAS Boltz reporter with a 3x15ns profile requiring
+  `3 x 501 = 1503` MMPBSA frames from the 5-15 ns window.
 - Added `mmpbsa visualize` commands for dependency-light HTML/SVG QC plots,
   run-level ranking plots, and selected-job portable PyMOL bundles.
 - Refined visualization outputs with run-level `index.html`, optional linked

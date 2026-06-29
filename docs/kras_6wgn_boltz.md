@@ -125,3 +125,71 @@ reported MM/GBSA and MM/PBSA values should be compared against Boltz confidence,
 pose stability, and any downstream assay data when available. Do not interpret
 the old 5XCO/GDP pilot correlations as evidence for this active-state GNP/Mg
 Boltz set.
+
+## Boltz2 Top10 3x15 ns Run
+
+For the rank-style Boltz2 top10 set, use the iPTM-only manifest:
+
+```text
+/data2/silong/projects/mmpbsa/configs/md_selected_iptm_only_manifest.csv
+```
+
+The scaffold selects `set=primary` and `selection_rank=1..10`. It intentionally
+fails if any selected row is missing an accessible `cif_path` or ligand topology
+(`smiles`/`canonical_smiles` or `ligand_mol2` + `ligand_frcmod`). Do not pair
+unrelated manifest rows with local `rank_*` CIF files.
+
+For this config manifest, CIF lookup falls back to:
+
+```text
+/data2/silong/projects/tmp/20260629_kras_boltz2_top10/<model>.cif
+```
+
+Ligand SMILES can be recovered from the historical Boltz manifest by rank/name:
+
+```text
+/data2/silong/projects/resources/boltz_kras/md_selected_manifest.csv
+```
+
+Run preflight first:
+
+```bash
+mamba run -n md python -m validation.kras_6wgn_boltz.scaffold preflight-iptm-manifest \
+  --manifest /data2/silong/projects/mmpbsa/configs/md_selected_iptm_only_manifest.csv \
+  --local-cif-dir /data2/silong/projects/tmp/20260629_kras_boltz2_top10 \
+  --smiles-manifest /data2/silong/projects/resources/boltz_kras/md_selected_manifest.csv \
+  --set primary \
+  --limit 10
+```
+
+Once preflight passes, stage jobs:
+
+```bash
+mamba run -n md python -m validation.kras_6wgn_boltz.scaffold make-jobs-from-iptm-manifest \
+  /data2/silong/projects/homework/kras_cyc_mmpbsa/boltz2_6wgn_gnp_mg_3x15ns \
+  --manifest /data2/silong/projects/mmpbsa/configs/md_selected_iptm_only_manifest.csv \
+  --local-cif-dir /data2/silong/projects/tmp/20260629_kras_boltz2_top10 \
+  --smiles-manifest /data2/silong/projects/resources/boltz_kras/md_selected_manifest.csv \
+  --dataset-label boltz2 \
+  --set primary \
+  --limit 10 \
+  --force
+```
+
+Run production with:
+
+```bash
+tmux new-session -d -s kras_boltz2_3x15 \
+  'cd /data2/silong/projects/mmpbsa && \
+   mamba run -n md bash /data2/silong/projects/homework/kras_cyc_mmpbsa/boltz2_6wgn_gnp_mg_3x15ns/run_top10_3x15ns_gpu_workers.sh'
+```
+
+The strict 3x15 ns report validates `3 x 501 = 1503` MMPBSA frames from the
+5-15 ns window:
+
+```bash
+mamba run -n md python -m validation.kras_6wgn_boltz.scaffold report-strict \
+  /data2/silong/projects/homework/kras_cyc_mmpbsa/boltz2_6wgn_gnp_mg_3x15ns \
+  --profile 3x15ns \
+  --expected-jobs 10
+```
