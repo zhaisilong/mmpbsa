@@ -78,6 +78,7 @@ def svg_text_values(svg: str) -> list[str]:
 def make_visual_job(root: Path, job_id: str, score: float = -10.0, partner_column: str = "ligand_heavy_rmsd_after_receptor_fit_angstrom") -> Path:
     job_dir = root / job_id
     (job_dir / "analysis" / "qc").mkdir(parents=True)
+    (job_dir / "analysis" / "mmpbsa").mkdir(parents=True)
     (job_dir / "analysis" / "structures").mkdir(parents=True)
     (job_dir / "result").mkdir(parents=True)
     (job_dir / "analysis" / "qc" / "trajectory_qc.csv").write_text(
@@ -131,6 +132,44 @@ def make_visual_job(root: Path, job_id: str, score: float = -10.0, partner_colum
         encoding="utf-8",
     )
     (job_dir / "result" / "summary.csv").write_text("job_id,GB_delta_total_kJ_mol\n" f"{job_id},{score}\n", encoding="utf-8")
+    (job_dir / "analysis" / "mmpbsa" / "audit.json").write_text(
+        json.dumps(
+            {
+                "status": "valid",
+                "frames": 303,
+                "replicas": [
+                    {
+                        "replica": "rep01",
+                        "values": {
+                            "GB_delta_total_kJ_mol": score + 5.0,
+                            "PB_delta_total_kJ_mol": score / 2.0 + 2.0,
+                            "GB_dMM_kJ_mol": score - 2.0,
+                            "PB_dMM_kJ_mol": score / 2.0 - 1.0,
+                        },
+                    },
+                    {
+                        "replica": "rep02",
+                        "values": {
+                            "GB_delta_total_kJ_mol": score - 7.0,
+                            "PB_delta_total_kJ_mol": score / 2.0 - 4.0,
+                            "GB_dMM_kJ_mol": score - 9.0,
+                            "PB_dMM_kJ_mol": score / 2.0 - 6.0,
+                        },
+                    },
+                    {
+                        "replica": "rep03",
+                        "values": {
+                            "GB_delta_total_kJ_mol": score + 1.0,
+                            "PB_delta_total_kJ_mol": score / 2.0 + 1.0,
+                            "GB_dMM_kJ_mol": score - 4.0,
+                            "PB_dMM_kJ_mol": score / 2.0 - 2.0,
+                        },
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     (job_dir / "manifest.json").write_text(
         json.dumps(
             {
@@ -529,9 +568,12 @@ class CoreTests(unittest.TestCase):
             self.assertIn("table.sortable", index)
             self.assertIn("GB score", index)
             self.assertIn("PB score", index)
+            self.assertIn("MMPBSA Results", index)
             self.assertIn("Trajectory QC", index)
+            self.assertIn("Correlation", index)
             self.assertIn("kJ/mol", index)
-            self.assertIn("Angstrom", index)
+            self.assertIn("Å", index)
+            self.assertNotIn("Angstrom", index)
             self.assertIn('class="num sticky-rank"', index)
             self.assertIn('class="sticky-job job-cell"', index)
             self.assertIn("<th>QC</th>", index)
@@ -542,19 +584,27 @@ class CoreTests(unittest.TestCase):
             self.assertIn("3 x 101 = 303", index)
             self.assertIn('data-sort="303"', index)
             self.assertIn("GB mean", index)
+            self.assertIn("GB best", index)
             self.assertIn("GB replica SD", index)
             self.assertIn("PB mean", index)
+            self.assertIn("PB best", index)
             self.assertIn("PB replica SD", index)
             self.assertIn("Native contacts mean", index)
+            self.assertIn("centered-chart", index)
+            self.assertIn("No correlation manifest", index)
+            self.assertIn("PB_delta_total_kJ_mol_replica_best", ranking)
+            self.assertIn("PB_delta_total_kJ_mol_replica_best_replica", ranking)
+            self.assertIn("-29", ranking)
+            self.assertIn("rep02", ranking)
             self.assertIn("native_contacts_mean", qc_summary)
             self.assertIn("chart-panel", index)
             self.assertIn("aria-sort", index)
             self.assertNotIn('width="900" height="390"', index)
+            self.assertNotIn("Composite rank", index)
             self.assertFalse((root / "visual_run" / "ranking.html").exists())
+            self.assertFalse((root / "visual_run" / "ranking.svg").exists())
             self.assertFalse((root / "visual_run" / "qc_overview.html").exists())
             self.assertTrue((root / "visual_run" / "samples" / "kras6wgn_rank_0001_model_0" / "index.html").exists())
-            ranking_svg = (root / "visual_run" / "ranking.svg").read_text(encoding="utf-8")
-            self.assertIn("r0001_m0", ranking_svg)
 
     def test_visualize_run_default_composite_ranking_prefers_pb(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -573,6 +623,67 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(report["sort_by"], "composite")
             ranking = (root / "visual_run" / "ranking.csv").read_text(encoding="utf-8")
             self.assertLess(ranking.find("pb_good"), ranking.find("gb_good_pb_bad"))
+
+    def test_visualize_run_writes_dynamic_manifest_correlations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_visual_job(root, "kras6wgnb2_rank_0001_model_0", score=-10.0)
+            make_visual_job(root, "kras6wgnb2_rank_0002_model_0", score=-20.0)
+            invalid = make_visual_job(root, "kras6wgnb2_rank_0003_model_0", score=-30.0)
+            summary_path = invalid / "result" / "summary.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["status"] = "invalid"
+            summary["trajectory_qc_status"] = "invalid"
+            summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+            source_manifest = root / "source_manifest.csv"
+            source_manifest.write_text(
+                "\n".join(
+                    [
+                        "model,iptm,kras_kd_pred,SMILES,cif_path",
+                        "rank_0001_model_0,0.1,5.0,CC,a.cif",
+                        "rank_0002_model_0,0.2,4.0,CC,b.cif",
+                        "rank_0003_model_0,0.3,3.0,CC,c.cif",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (root / "boltz2_6wgn_gnp_mg_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "source_manifest": str(source_manifest),
+                        "jobs": [
+                            {"job_id": "kras6wgnb2_rank_0001_model_0", "representative_model": "rank_0001_model_0", "boltz2_id": "rank_0001"},
+                            {"job_id": "kras6wgnb2_rank_0002_model_0", "representative_model": "rank_0002_model_0", "boltz2_id": "rank_0002"},
+                            {"job_id": "kras6wgnb2_rank_0003_model_0", "representative_model": "rank_0003_model_0", "boltz2_id": "rank_0003"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            report = visualize_run(root, root / "visual_run")
+
+            self.assertEqual(report["jobs"], 3)
+            self.assertTrue((root / "visual_run" / "correlations.csv").exists())
+            self.assertTrue((root / "visual_run" / "correlation_iptm.svg").exists())
+            self.assertTrue((root / "visual_run" / "correlation_kras_kd_pred.svg").exists())
+            self.assertIn("correlation_scatter_svgs", report)
+            with (root / "visual_run" / "correlations.csv").open(newline="") as handle:
+                correlations = list(csv.DictReader(handle))
+            columns = {row["manifest_column"] for row in correlations}
+            self.assertIn("iptm", columns)
+            self.assertIn("kras_kd_pred", columns)
+            self.assertNotIn("SMILES", columns)
+            self.assertTrue(all(row["n"] == "2" for row in correlations if row["status"] == "ok"))
+            index = (root / "visual_run" / "index.html").read_text(encoding="utf-8")
+            self.assertNotIn("correlation_scatter.svg", index)
+            self.assertIn("correlation_iptm.svg", index)
+            self.assertIn("correlation_kras_kd_pred.svg", index)
+            self.assertIn("correlation-grid", index)
+            self.assertIn("kras_kd_pred", index)
+            self.assertIn("iptm", index)
 
     @unittest.skipUnless(CLICK_AVAILABLE, "click is not installed")
     def test_visualize_run_cli_zip_and_pymol_flags(self) -> None:
@@ -1195,6 +1306,37 @@ CL- 1
             self.assertIn("PP0316_model_0", report["failures"][0])
             self.assertIn("missing CIF path", report["failures"][0])
             self.assertIn("missing ligand topology", report["failures"][0])
+
+    def test_kras_boltz_iptm_manifest_accepts_ordered_uppercase_smiles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cif_dir = root / "cifs"
+            cif_dir.mkdir()
+            for model in ("rank_0892_model_6", "rank_0992_model_4"):
+                (cif_dir / f"{model}.cif").write_text(minimal_boltz_cif(), encoding="utf-8")
+            manifest = root / "manifest.csv"
+            manifest.write_text(
+                "set,rank,name,model,SMILES,iptm,cif_path,prediction_dir\n"
+                "primary,892,rank_0892,rank_0892_model_6,CCO,0.95,missing/rank_0892_model_6.cif,predictions/rank_0892\n"
+                "primary,992,rank_0992,rank_0992_model_4,CCN,0.94,missing/rank_0992_model_4.cif,predictions/rank_0992\n",
+                encoding="utf-8",
+            )
+
+            report = kras_boltz_make_jobs_from_iptm_manifest(
+                manifest,
+                root / "run",
+                local_cif_dir=cif_dir,
+                smiles_manifest=None,
+                prepare_inputs=False,
+            )
+
+            self.assertEqual(report["job_count"], 2)
+            first = json.loads((root / "run" / "kras6wgnb2_rank_0892_model_6" / "kras6wgnb2_rank_0892_model_6.json").read_text(encoding="utf-8"))
+            second = json.loads((root / "run" / "kras6wgnb2_rank_0992_model_4" / "kras6wgnb2_rank_0992_model_4.json").read_text(encoding="utf-8"))
+            self.assertEqual(first["selection_rank"], "1")
+            self.assertEqual(first["boltz_smiles"], "CCO")
+            self.assertEqual(second["selection_rank"], "2")
+            self.assertEqual(second["boltz_smiles"], "CCN")
 
     def test_kras_boltz_make_jobs_from_iptm_manifest_writes_worker_script(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -239,9 +239,17 @@ Visualization helpers read existing outputs only. They do not rerun MD or
 MMPBSA. `mmpbsa visualize job` writes a per-sample `index.html`, QC audit CSV,
 trajectory QC plot, interaction-contact plot, and MD energy landscape from
 existing analysis and production MD files. `mmpbsa visualize run` creates one
-group `index.html` with a sortable ranking table plus `ranking.csv` and
-`qc_summary.csv`; default ranking is composite: PB, then PB dMM, then GB, then
-GB dMM.
+group `index.html` with separate MMPBSA Results, Trajectory QC, and Correlation
+sections plus `ranking.csv`, `qc_summary.csv`, and optional `correlations.csv`.
+Default ranking is composite: PB, then PB dMM, then GB, then GB dMM. MMPBSA
+tables report replica means, best per-replica scores, and replica SD values
+when replica audit files are available.
+
+Run-level correlations are optional and diagnostic. By default, the visualizer
+uses a run manifest's `source_manifest` when present and auto-detects numeric
+non-identifier columns such as `kras_kd_pred` or `iptm`. Use
+`--correlation-manifest PATH` to provide an external CSV/TSV and repeat
+`--correlate-column COLUMN` to restrict the plotted columns.
 
 Use `--pymol` to add PyMOL visualization assets to sample reports. This writes
 aligned MMPBSA-window scripts plus full-production trajectories processed with
@@ -254,7 +262,8 @@ attempted; it implies `--pymol` and requires local `pymol` plus `ffmpeg`. Use
 report directory.
 
 `mmpbsa visualize bundle` remains available as a legacy PyMOL-only selected-job
-bundle, but the recommended portable report path is `visualize run/job --zip`.
+bundle, but the recommended report path is `visualize run` or `visualize job`;
+use `--zip` only when a single archive is needed for transfer.
 
 Local validation scaffolding is kept outside the core package under
 `validation/`. It is for checking this repository's peptide/ligand behavior, not

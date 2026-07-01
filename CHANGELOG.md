@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.8 - 2026-07-01
+
+- Reworked run-level visualization reports into separate MMPBSA Results,
+  Trajectory QC, and Correlation sections.
+- Added run-level manifest correlations with per-column tables and scatter
+  plots for numeric manifest fields such as `iptm` and `kras_kd_pred`.
+- Added best-replica MMPBSA score columns alongside replica means and replica
+  SD values in run ranking outputs.
+- Split trajectory QC into its own run table and centered QC summary plot with
+  Angstrom values displayed as `Å`.
+- Extended KRAS 6WGN/GNP-Mg Boltz2 3x15 ns scaffold/report docs for strict
+  production reporting and visual review from scratch output directories.
+
 ## v0.1.7 - 2026-06-27
 
 - Added a local KRAS 6WGN/GNP-Mg Boltz scaffold that prepares `LIG1` as the

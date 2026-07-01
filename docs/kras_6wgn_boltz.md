@@ -131,7 +131,7 @@ Boltz set.
 For the rank-style Boltz2 top10 set, use the iPTM-only manifest:
 
 ```text
-/data2/silong/projects/mmpbsa/configs/md_selected_iptm_only_manifest.csv
+/data2/silong/projects/tmp/20260629_kras_boltz2_top10/manifest.csv
 ```
 
 The scaffold selects `set=primary` and `selection_rank=1..10`. It intentionally
@@ -155,7 +155,7 @@ Run preflight first:
 
 ```bash
 mamba run -n md python -m validation.kras_6wgn_boltz.scaffold preflight-iptm-manifest \
-  --manifest /data2/silong/projects/mmpbsa/configs/md_selected_iptm_only_manifest.csv \
+  --manifest /data2/silong/projects/tmp/20260629_kras_boltz2_top10/manifest.csv \
   --local-cif-dir /data2/silong/projects/tmp/20260629_kras_boltz2_top10 \
   --smiles-manifest /data2/silong/projects/resources/boltz_kras/md_selected_manifest.csv \
   --set primary \
@@ -167,7 +167,7 @@ Once preflight passes, stage jobs:
 ```bash
 mamba run -n md python -m validation.kras_6wgn_boltz.scaffold make-jobs-from-iptm-manifest \
   /data2/silong/projects/homework/kras_cyc_mmpbsa/boltz2_6wgn_gnp_mg_3x15ns \
-  --manifest /data2/silong/projects/mmpbsa/configs/md_selected_iptm_only_manifest.csv \
+  --manifest /data2/silong/projects/tmp/20260629_kras_boltz2_top10/manifest.csv \
   --local-cif-dir /data2/silong/projects/tmp/20260629_kras_boltz2_top10 \
   --smiles-manifest /data2/silong/projects/resources/boltz_kras/md_selected_manifest.csv \
   --dataset-label boltz2 \
@@ -192,4 +192,16 @@ mamba run -n md python -m validation.kras_6wgn_boltz.scaffold report-strict \
   /data2/silong/projects/homework/kras_cyc_mmpbsa/boltz2_6wgn_gnp_mg_3x15ns \
   --profile 3x15ns \
   --expected-jobs 10
+```
+
+For visual review, write the run report to a scratch directory. The homepage
+separates MMPBSA scores, trajectory QC, and source-manifest correlations; for
+Boltz2 manifests the default correlation columns include `kras_kd_pred` and
+`iptm` when both are numeric:
+
+```bash
+mmpbsa visualize run \
+  /data2/silong/projects/homework/kras_cyc_mmpbsa/boltz2_6wgn_gnp_mg_3x15ns_bcc \
+  --output-dir /data2/silong/projects/tmp/boltz2_6wgn_gnp_mg_3x15ns_bcc_visual \
+  --include-samples --pymol
 ```

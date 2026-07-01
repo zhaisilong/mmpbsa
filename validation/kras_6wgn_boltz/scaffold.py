@@ -181,6 +181,14 @@ def find_manifest_row_for_cif(cif: Path, rows: Sequence[dict[str, str]]) -> dict
     return row
 
 
+def manifest_smiles(row: dict[str, str]) -> str:
+    for key in ("smiles", "SMILES", "canonical_smiles", "canonical_SMILES"):
+        value = str(row.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def load_iptm_manifest_rows(path: Path, *, set_name: str = "primary", limit: int | None = 10) -> list[dict[str, str]]:
     if not path.exists():
         raise SystemExit(f"Missing Boltz2 iPTM manifest: {path}")
@@ -188,12 +196,17 @@ def load_iptm_manifest_rows(path: Path, *, set_name: str = "primary", limit: int
         rows = list(csv.DictReader(handle))
     if not rows:
         raise SystemExit(f"Boltz2 iPTM manifest is empty: {path}")
-    required = ("set", "selection_rank", "rank", "name", "model", "cif_path")
+    required = ("set", "rank", "name", "model", "cif_path")
     missing = [field for field in required if field not in rows[0]]
     if missing:
         raise SystemExit(f"Boltz2 iPTM manifest {path} is missing required columns: {', '.join(missing)}")
-    selected = [row for row in rows if str(row.get("set") or "").strip() == set_name]
-    selected.sort(key=lambda row: int(float(str(row.get("selection_rank") or "999999"))))
+    selected = [dict(row) for row in rows if str(row.get("set") or "").strip() == set_name]
+    has_selection_rank = any(str(row.get("selection_rank") or "").strip() for row in selected)
+    if has_selection_rank:
+        selected.sort(key=lambda row: int(float(str(row.get("selection_rank") or "999999"))))
+    for index, row in enumerate(selected, start=1):
+        if not str(row.get("selection_rank") or "").strip():
+            row["selection_rank"] = str(index)
     if limit is not None:
         selected = selected[:limit]
     if not selected:
@@ -261,7 +274,7 @@ def load_smiles_fallbacks(path: Path | None) -> dict[str, str]:
         rows = list(csv.DictReader(handle))
     fallbacks: dict[str, str] = {}
     for row in rows:
-        smiles = str(row.get("smiles") or row.get("canonical_smiles") or "").strip()
+        smiles = manifest_smiles(row)
         if not smiles:
             continue
         for key in smiles_lookup_keys(row):
@@ -323,7 +336,7 @@ def resolve_iptm_topology(
     search_roots: Sequence[Path],
     smiles_fallbacks: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    smiles = str(row.get("smiles") or row.get("canonical_smiles") or "").strip()
+    smiles = manifest_smiles(row)
     if not smiles and smiles_fallbacks:
         smiles = fallback_smiles_for_row(row, smiles_fallbacks)
     if smiles:
@@ -416,7 +429,7 @@ def preflight_iptm_manifest(
                 "job_id": iptm_job_id(row),
                 "cif": str(cif) if cif else "",
                 "topology_kind": topology["kind"],
-                "topology_source": "fallback_smiles" if topology["kind"] == "smiles" and not str(row.get("smiles") or row.get("canonical_smiles") or "").strip() else topology["kind"],
+                "topology_source": "fallback_smiles" if topology["kind"] == "smiles" and not manifest_smiles(row) else topology["kind"],
                 "ligand_file": topology.get("ligand_file", ""),
                 "ligand_mol2": topology.get("ligand_mol2", ""),
                 "ligand_frcmod": topology.get("ligand_frcmod", ""),

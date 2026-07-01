@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .common import label_chains, mamba_command, parse_simple_mask, read_json, run_logged, utc_now, write_csv_atomic, write_json_atomic, write_text_atomic
+from .metrics import linear_fit, pearson_r, spearman_r
 
 
 PARTNER_COLUMNS = [
@@ -21,10 +22,16 @@ PARTNER_COLUMNS = [
     ("peptide_bb_rmsd_after_receptor_fit_angstrom", "Peptide backbone RMSD"),
 ]
 SCORE_FIELDS = [
-    ("GB_delta_total_kJ_mol", "GB total", "GB_delta_total_kJ_mol_replica_sd"),
-    ("PB_delta_total_kJ_mol", "PB total", "PB_delta_total_kJ_mol_replica_sd"),
+    ("GB_delta_total_kJ_mol", "GB mean", "GB_delta_total_kJ_mol_replica_sd"),
+    ("PB_delta_total_kJ_mol", "PB mean", "PB_delta_total_kJ_mol_replica_sd"),
     ("GB_dMM_kJ_mol", "GB dMM", "GB_dMM_kJ_mol_replica_sd"),
     ("PB_dMM_kJ_mol", "PB dMM", "PB_dMM_kJ_mol_replica_sd"),
+]
+SCORE_METRICS = [
+    "PB_delta_total_kJ_mol",
+    "PB_dMM_kJ_mol",
+    "GB_delta_total_kJ_mol",
+    "GB_dMM_kJ_mol",
 ]
 COFACTOR_RESN = "GNP+GDP+GTP+ATP+ADP+MG+MN+ZN+CA"
 BINDER_CARBON_COLORS = ["cyan", "yelloworange", "tv_green", "magenta", "salmon"]
@@ -47,6 +54,10 @@ FIELD_LABELS = {
     "PB_delta_total_kJ_mol": "PB mean",
     "GB_dMM_kJ_mol": "GB dMM mean",
     "PB_dMM_kJ_mol": "PB dMM mean",
+    "GB_delta_total_kJ_mol_replica_best": "GB best",
+    "PB_delta_total_kJ_mol_replica_best": "PB best",
+    "GB_dMM_kJ_mol_replica_best": "GB dMM best",
+    "PB_dMM_kJ_mol_replica_best": "PB dMM best",
     "GB_delta_total_kJ_mol_replica_sd": "GB replica SD",
     "PB_delta_total_kJ_mol_replica_sd": "PB replica SD",
     "GB_dMM_kJ_mol_replica_sd": "GB dMM replica SD",
@@ -55,22 +66,28 @@ FIELD_LABELS = {
     "PB_delta_total_kcal_mol": "PB mean",
 }
 RUN_TABLE_FIELDS = [
-    "GB_delta_total_kJ_mol",
-    "GB_delta_total_kJ_mol_replica_sd",
     "PB_delta_total_kJ_mol",
+    "PB_delta_total_kJ_mol_replica_best",
     "PB_delta_total_kJ_mol_replica_sd",
-    "GB_dMM_kJ_mol",
-    "GB_dMM_kJ_mol_replica_sd",
     "PB_dMM_kJ_mol",
+    "PB_dMM_kJ_mol_replica_best",
     "PB_dMM_kJ_mol_replica_sd",
+    "GB_delta_total_kJ_mol",
+    "GB_delta_total_kJ_mol_replica_best",
+    "GB_delta_total_kJ_mol_replica_sd",
+    "GB_dMM_kJ_mol",
+    "GB_dMM_kJ_mol_replica_best",
+    "GB_dMM_kJ_mol_replica_sd",
 ]
 RUN_TABLE_GROUPS = [
     (
         "PB score",
         [
             ("PB_delta_total_kJ_mol", "PB mean", "kJ/mol", ""),
+            ("PB_delta_total_kJ_mol_replica_best", "PB best", "kJ/mol", "best"),
             ("PB_delta_total_kJ_mol_replica_sd", "PB replica SD", "kJ/mol", "sd"),
             ("PB_dMM_kJ_mol", "PB dMM mean", "kJ/mol", ""),
+            ("PB_dMM_kJ_mol_replica_best", "PB dMM best", "kJ/mol", "best"),
             ("PB_dMM_kJ_mol_replica_sd", "PB dMM replica SD", "kJ/mol", "sd"),
         ],
     ),
@@ -78,22 +95,41 @@ RUN_TABLE_GROUPS = [
         "GB score",
         [
             ("GB_delta_total_kJ_mol", "GB mean", "kJ/mol", ""),
+            ("GB_delta_total_kJ_mol_replica_best", "GB best", "kJ/mol", "best"),
             ("GB_delta_total_kJ_mol_replica_sd", "GB replica SD", "kJ/mol", "sd"),
             ("GB_dMM_kJ_mol", "GB dMM mean", "kJ/mol", ""),
+            ("GB_dMM_kJ_mol_replica_best", "GB dMM best", "kJ/mol", "best"),
             ("GB_dMM_kJ_mol_replica_sd", "GB dMM replica SD", "kJ/mol", "sd"),
         ],
     ),
-    (
-        "Trajectory QC",
-        [
-            ("receptor_rmsd_mean", "Receptor RMSD", "Angstrom", ""),
-            ("partner_rmsd_mean", "Partner RMSD", "Angstrom", ""),
-            ("native_contacts_mean", "Native contacts mean", "contacts", ""),
-            ("native_contacts_min", "Native contacts min", "contacts", ""),
-            ("interface_distance_min", "Interface distance min", "Angstrom", ""),
-        ],
-    ),
 ]
+TRAJECTORY_QC_TABLE_FIELDS = [
+    ("trajectory_qc_status", "Trajectory QC", "", ""),
+    ("receptor_rmsd_mean", "Receptor RMSD", "Å", ""),
+    ("partner_rmsd_mean", "Partner RMSD", "Å", ""),
+    ("native_contacts_mean", "Native contacts mean", "contacts", ""),
+    ("native_contacts_min", "Native contacts min", "contacts", ""),
+    ("interface_distance_min", "Interface distance min", "Å", ""),
+    ("qc_issue_count", "Issues", "count", ""),
+]
+CORRELATION_EXCLUDED_COLUMNS = {
+    "job_id",
+    "id",
+    "index",
+    "rank",
+    "name",
+    "model",
+    "model_id",
+    "representative_model",
+    "smiles",
+    "canonical_smiles",
+    "cif",
+    "cif_path",
+    "path",
+    "prediction_dir",
+    "source",
+    "set",
+}
 
 
 def visualize_job(
@@ -177,6 +213,8 @@ def visualize_run(
     align: bool = True,
     movie_stride: int = 5,
     render_video: bool = False,
+    correlation_manifest: Path | None = None,
+    correlate_columns: list[str] | None = None,
     zip_archive: bool = False,
     archive_name: str | None = None,
 ) -> dict[str, Any]:
@@ -211,16 +249,37 @@ def visualize_run(
             )
     ranking_rows = [ranking_row(row, sort_by) for row in rows]
     qc_rows = [run_qc_row(Path(str(row["job_dir"])), row) for row in rows]
+    correlation_report = run_correlation_report(root, rows, correlation_manifest=correlation_manifest, correlate_columns=correlate_columns)
     write_csv_atomic(out / "ranking.csv", ranking_rows)
     write_csv_atomic(out / "qc_summary.csv", qc_rows)
     write_csv_atomic(out / "qc_overview.csv", qc_rows)
+    if correlation_report["rows"]:
+        write_csv_atomic(out / "correlations.csv", correlation_report["rows"])
 
-    ranking_svg = ranking_svg_plot(ranking_rows, sort_by)
+    ranking_svg = "" if sort_by == COMPOSITE_SORT else ranking_svg_plot(ranking_rows, sort_by)
     qc_svg = qc_overview_svg(qc_rows)
-    write_text_atomic(out / "ranking.svg", ranking_svg)
+    correlation_svgs = correlation_scatter_svgs(correlation_report["points"], correlation_report["columns"])
+    if ranking_svg:
+        write_text_atomic(out / "ranking.svg", ranking_svg)
     write_text_atomic(out / "qc_summary.svg", qc_svg)
     write_text_atomic(out / "qc_overview.svg", qc_svg)
-    write_text_atomic(out / "index.html", run_index_html(root, rows, ranking_rows, qc_rows, ranking_svg, qc_svg, sort_by, include_samples=write_sample_reports))
+    for filename, svg in correlation_svgs.values():
+        write_text_atomic(out / filename, svg)
+    write_text_atomic(
+        out / "index.html",
+        run_index_html(
+            root,
+            rows,
+            ranking_rows,
+            qc_rows,
+            ranking_svg,
+            qc_svg,
+            sort_by,
+            include_samples=write_sample_reports,
+            correlation_report=correlation_report,
+            correlation_svgs={column: filename for column, (filename, _) in correlation_svgs.items()},
+        ),
+    )
 
     report = {
         "schema_version": "mmpbsa.visualize.run.v1",
@@ -236,6 +295,10 @@ def visualize_run(
         "ranking_csv": str(out / "ranking.csv"),
         "qc_summary_csv": str(out / "qc_summary.csv"),
     }
+    if correlation_report["rows"]:
+        report["correlations_csv"] = str(out / "correlations.csv")
+    if correlation_svgs:
+        report["correlation_scatter_svgs"] = {column: str(out / filename) for column, (filename, _) in correlation_svgs.items()}
     if job_visuals:
         report["sample_reports"] = job_visuals
     if zip_archive or archive_name:
@@ -1280,10 +1343,36 @@ def completed_summary_rows(run_dir: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for summary_path in sorted(run_dir.glob("*/result/summary.json")):
         row = json.loads(summary_path.read_text(encoding="utf-8"))
-        row["job_dir"] = str(summary_path.parents[1])
-        row.setdefault("job_id", summary_path.parents[1].name)
+        job_dir = summary_path.parents[1]
+        row["job_dir"] = str(job_dir)
+        row.setdefault("job_id", job_dir.name)
+        row.update(replica_best_score_fields(job_dir))
         rows.append(row)
     return rows
+
+
+def replica_best_score_fields(job_dir: Path) -> dict[str, Any]:
+    audit = read_optional_json(job_dir / "analysis" / "mmpbsa" / "audit.json")
+    replicas = audit.get("replicas") if isinstance(audit, dict) else None
+    if not isinstance(replicas, list):
+        return {}
+    fields: dict[str, Any] = {}
+    for metric in SCORE_METRICS:
+        candidates: list[tuple[float, str]] = []
+        for replica in replicas:
+            if not isinstance(replica, dict):
+                continue
+            values = replica.get("values") if isinstance(replica.get("values"), dict) else {}
+            value = numeric(values.get(metric))
+            if value is None:
+                continue
+            replica_name = str(replica.get("replica") or replica.get("replica_index") or "")
+            candidates.append((value, replica_name))
+        if candidates:
+            best_value, replica_name = min(candidates, key=lambda item: item[0])
+            fields[f"{metric}_replica_best"] = best_value
+            fields[f"{metric}_replica_best_replica"] = replica_name
+    return fields
 
 
 def sort_summary_rows(rows: list[dict[str, Any]], sort_by: str) -> list[dict[str, Any]]:
@@ -1317,6 +1406,12 @@ def ranking_row(row: dict[str, Any], sort_by: str) -> dict[str, Any]:
     for key, _, replica_sd in SCORE_FIELDS:
         if key not in out and key in row:
             out[key] = row.get(key, "")
+        best_key = f"{key}_replica_best"
+        best_replica_key = f"{key}_replica_best_replica"
+        if best_key not in out and best_key in row:
+            out[best_key] = row.get(best_key, "")
+        if best_replica_key not in out and best_replica_key in row:
+            out[best_replica_key] = row.get(best_replica_key, "")
         if replica_sd not in out and replica_sd in row:
             out[replica_sd] = row.get(replica_sd, "")
     return out
@@ -1355,6 +1450,200 @@ def run_qc_row(job_dir: Path, summary: dict[str, Any]) -> dict[str, Any]:
         "interface_distance_last": mindist.get("last", "") if mindist else "",
         "qc_issue_count": len(qc.get("issues", [])) if qc else "",
     }
+
+
+def run_correlation_report(
+    run_dir: Path,
+    rows: list[dict[str, Any]],
+    *,
+    correlation_manifest: Path | None,
+    correlate_columns: list[str] | None,
+) -> dict[str, Any]:
+    run_manifest = load_visual_run_manifest(run_dir)
+    manifest_path = correlation_manifest
+    if manifest_path is None:
+        source = str(run_manifest.get("source_manifest") or "").strip()
+        manifest_path = Path(source) if source else None
+    if manifest_path is None:
+        return {"source_manifest": "", "columns": [], "rows": [], "points": [], "message": "No correlation manifest was provided or discovered."}
+    manifest_path = manifest_path.expanduser().resolve()
+    if not manifest_path.exists():
+        return {"source_manifest": str(manifest_path), "columns": [], "rows": [], "points": [], "message": "Correlation manifest was not found."}
+    manifest_rows = read_delimited_rows(manifest_path)
+    if not manifest_rows:
+        return {"source_manifest": str(manifest_path), "columns": [], "rows": [], "points": [], "message": "Correlation manifest contains no rows."}
+    matched = match_manifest_rows(rows, run_manifest, manifest_rows)
+    requested = [column for column in (correlate_columns or []) if column]
+    columns = requested or auto_correlation_columns(matched)
+    score_metrics = correlation_score_metrics(rows)
+    correlation_rows: list[dict[str, Any]] = []
+    for column in columns:
+        for metric in score_metrics:
+            pairs = [
+                (float(x), float(y))
+                for summary, manifest in matched
+                if valid_correlation_summary(summary)
+                for x, y in [(numeric(manifest.get(column)), numeric(summary.get(metric)))]
+                if x is not None and y is not None
+            ]
+            record = {
+                "manifest_column": column,
+                "score_metric": metric,
+                "score_label": pretty_field_label(metric),
+                "n": len(pairs),
+                "pearson_r": "",
+                "spearman_r": "",
+                "slope": "",
+                "intercept": "",
+                "status": "insufficient",
+            }
+            if len(pairs) >= 2:
+                xs = [x for x, _ in pairs]
+                ys = [y for _, y in pairs]
+                slope, intercept = linear_fit(xs, ys)
+                record.update(
+                    {
+                        "pearson_r": pearson_r(xs, ys),
+                        "spearman_r": spearman_r(xs, ys),
+                        "slope": slope,
+                        "intercept": intercept,
+                        "status": "ok",
+                    }
+                )
+            correlation_rows.append(record)
+    primary_metric = "PB_delta_total_kJ_mol"
+    points = [
+        {
+            "manifest_column": column,
+            "job_id": summary.get("job_id", ""),
+            "x": numeric(manifest.get(column)),
+            "y": numeric(summary.get(primary_metric)),
+        }
+        for column in columns
+        for summary, manifest in matched
+        if valid_correlation_summary(summary) and numeric(manifest.get(column)) is not None and numeric(summary.get(primary_metric)) is not None
+    ]
+    return {
+        "source_manifest": str(manifest_path),
+        "columns": columns,
+        "rows": correlation_rows,
+        "points": points,
+        "primary_metric": primary_metric,
+        "message": "" if columns else "No numeric manifest correlation fields available.",
+    }
+
+
+def load_visual_run_manifest(run_dir: Path) -> dict[str, Any]:
+    candidates = sorted(run_dir.glob("*manifest*.json"))
+    for path in candidates:
+        data = read_optional_json(path)
+        if isinstance(data.get("jobs"), list):
+            return data
+    return {}
+
+
+def read_delimited_rows(path: Path) -> list[dict[str, str]]:
+    delimiter = "\t" if path.suffix.lower() in {".tsv", ".tab"} else ","
+    with path.open(newline="", encoding="utf-8", errors="replace") as handle:
+        return list(csv.DictReader(handle, delimiter=delimiter))
+
+
+def match_manifest_rows(
+    summaries: list[dict[str, Any]],
+    run_manifest: dict[str, Any],
+    manifest_rows: list[dict[str, str]],
+) -> list[tuple[dict[str, Any], dict[str, str]]]:
+    manifest_index: dict[str, dict[str, str]] = {}
+    for row in manifest_rows:
+        for key in manifest_match_keys(row):
+            manifest_index.setdefault(key, row)
+    run_jobs = {str(job.get("job_id") or ""): job for job in run_manifest.get("jobs", []) if isinstance(job, dict)}
+    matched: list[tuple[dict[str, Any], dict[str, str]]] = []
+    for summary in summaries:
+        keys = set(summary_match_keys(summary))
+        run_job = run_jobs.get(str(summary.get("job_id") or ""))
+        if run_job:
+            keys.update(summary_match_keys(run_job))
+            for key in ("boltz2_id", "representative_model"):
+                keys.update(normalized_match_keys(run_job.get(key)))
+        manifest = next((manifest_index[key] for key in keys if key in manifest_index), None)
+        if manifest is not None:
+            matched.append((summary, manifest))
+    return matched
+
+
+def manifest_match_keys(row: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    for field in ("job_id", "model", "representative_model", "model_id", "name"):
+        keys.update(normalized_match_keys(row.get(field)))
+    rank_value = numeric(row.get("rank"))
+    if rank_value is not None:
+        keys.add(f"rank_{int(rank_value):04d}")
+    return keys
+
+
+def summary_match_keys(row: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    for field in ("job_id", "model", "model_id", "representative_model", "name"):
+        keys.update(normalized_match_keys(row.get(field)))
+    text = " ".join(str(row.get(field) or "") for field in ("job_id", "model_id", "representative_model", "name"))
+    for match in re.finditer(r"rank_(\d{3,4})(?:_model_\d+)?", text):
+        rank_text = match.group(1)
+        keys.add(f"rank_{int(rank_text):04d}")
+        if "_model_" in match.group(0):
+            keys.add(match.group(0).lower())
+    return keys
+
+
+def normalized_match_keys(value: Any) -> set[str]:
+    text = str(value or "").strip()
+    if not text:
+        return set()
+    keys = {text.lower()}
+    name = Path(text).name
+    if name:
+        keys.add(name.lower())
+        keys.add(Path(name).stem.lower())
+    return keys
+
+
+def auto_correlation_columns(matched: list[tuple[dict[str, Any], dict[str, str]]]) -> list[str]:
+    if not matched:
+        return []
+    fieldnames = list(matched[0][1].keys())
+    columns: list[str] = []
+    for column in fieldnames:
+        if is_excluded_correlation_column(column):
+            continue
+        values = [numeric(manifest.get(column)) for summary, manifest in matched if valid_correlation_summary(summary)]
+        if sum(value is not None for value in values) >= 2:
+            columns.append(column)
+    return columns
+
+
+def is_excluded_correlation_column(column: str) -> bool:
+    normalized = column.strip().lower()
+    if normalized in CORRELATION_EXCLUDED_COLUMNS:
+        return True
+    return any(token in normalized for token in ("smiles", "path", "dir", "file", "model", "name"))
+
+
+def correlation_score_metrics(rows: list[dict[str, Any]]) -> list[str]:
+    metrics: list[str] = []
+    for metric in SCORE_METRICS:
+        metrics.append(metric)
+        best = f"{metric}_replica_best"
+        if any(numeric(row.get(best)) is not None for row in rows):
+            metrics.append(best)
+    return metrics
+
+
+def valid_correlation_summary(row: dict[str, Any]) -> bool:
+    return (
+        str(row.get("status") or "").lower() == "valid"
+        and str(row.get("trajectory_qc_status") or "").lower() == "valid"
+        and str(row.get("mmpbsa_qc_status") or "").lower() == "valid"
+    )
 
 
 def first_metric_with_suffix(metrics: dict[str, dict[str, float]], suffix: str) -> dict[str, float] | None:
@@ -1396,7 +1685,97 @@ def qc_overview_svg(rows: list[dict[str, Any]]) -> str:
             bars.append({"label": compact_job_id(job_id), "full_label": job_id, "value": value, "sd": None})
     if not bars:
         bars = [{"label": compact_job_id(str(row.get("job_id") or "")), "full_label": str(row.get("job_id") or ""), "value": 0.0, "sd": None} for row in rows]
-    return bar_svg(bars, "Run partner RMSD mean", "angstrom", palette="qc")
+    return bar_svg(bars, "Run partner RMSD mean", "Å", palette="qc")
+
+
+def correlation_scatter_svgs(points: list[dict[str, Any]], columns: list[str]) -> dict[str, tuple[str, str]]:
+    svgs: dict[str, tuple[str, str]] = {}
+    for column in columns:
+        svg = correlation_scatter_svg(points, [column])
+        if svg:
+            svgs[column] = (f"correlation_{safe_filename(column)}.svg", svg)
+    return svgs
+
+
+def correlation_scatter_svg(points: list[dict[str, Any]], columns: list[str]) -> str:
+    active_columns = [column for column in columns if any(point.get("manifest_column") == column for point in points)]
+    if not active_columns:
+        return ""
+    panel_w, panel_h = 430, 320
+    cols = 1 if len(active_columns) == 1 else 2
+    rows = math.ceil(len(active_columns) / cols)
+    width, height = panel_w * cols, 52 + panel_h * rows
+    parts = [
+        svg_header(width, height),
+        '<text x="24" y="30" class="title">Manifest correlation vs PB mean</text>',
+    ]
+    for idx, column in enumerate(active_columns):
+        panel_points = [point for point in points if point.get("manifest_column") == column]
+        x_values = [float(point["x"]) for point in panel_points if numeric(point.get("x")) is not None]
+        y_values = [float(point["y"]) for point in panel_points if numeric(point.get("y")) is not None]
+        if len(x_values) < 2 or len(y_values) < 2:
+            continue
+        col = idx % cols
+        row = idx // cols
+        x0 = col * panel_w + 62
+        y0 = 64 + row * panel_h
+        plot_w, plot_h = panel_w - 96, panel_h - 104
+        x_min, x_max = padded_range(x_values, include_zero=False)
+        y_min, y_max = padded_range(y_values, include_zero=False)
+
+        def mx(value: float) -> float:
+            return x0 + (value - x_min) / (x_max - x_min) * plot_w
+
+        def my(value: float) -> float:
+            return y0 + plot_h - (value - y_min) / (y_max - y_min) * plot_h
+
+        slope, intercept = linear_fit(x_values, y_values)
+        pearson = pearson_r(x_values, y_values)
+        spearman = spearman_r(x_values, y_values)
+        parts.append(f'<text x="{x0:.1f}" y="{y0 - 24:.1f}" class="subtitle">{escape(column)}</text>')
+        parts.append(f'<text x="{x0:.1f}" y="{y0 - 8:.1f}" class="legend">Pearson r={format_svg_number(pearson)}, Spearman r={format_svg_number(spearman)}, n={len(panel_points)}</text>')
+        parts.append(f'<line x1="{x0:.1f}" y1="{y0 + plot_h:.1f}" x2="{x0 + plot_w:.1f}" y2="{y0 + plot_h:.1f}" class="axis"/>')
+        parts.append(f'<line x1="{x0:.1f}" y1="{y0:.1f}" x2="{x0:.1f}" y2="{y0 + plot_h:.1f}" class="axis"/>')
+        for tick in nice_ticks(x_min, x_max, max_ticks=5):
+            x = mx(tick)
+            parts.append(f'<line x1="{x:.1f}" y1="{y0 + plot_h:.1f}" x2="{x:.1f}" y2="{y0 + plot_h + 4:.1f}" class="axis"/>')
+            parts.append(f'<text x="{x:.1f}" y="{y0 + plot_h + 18:.1f}" class="tick" text-anchor="middle">{format_svg_number(tick)}</text>')
+        for tick in nice_ticks(y_min, y_max, max_ticks=5):
+            y = my(tick)
+            parts.append(f'<line x1="{x0 - 4:.1f}" y1="{y:.1f}" x2="{x0:.1f}" y2="{y:.1f}" class="axis"/>')
+            parts.append(f'<line x1="{x0:.1f}" y1="{y:.1f}" x2="{x0 + plot_w:.1f}" y2="{y:.1f}" class="grid"/>')
+            parts.append(f'<text x="{x0 - 8:.1f}" y="{y + 4:.1f}" class="tick" text-anchor="end">{format_svg_number(tick)}</text>')
+        if not math.isnan(slope) and not math.isnan(intercept):
+            x_a, x_b = min(x_values), max(x_values)
+            y_a, y_b = slope * x_a + intercept, slope * x_b + intercept
+            parts.append(f'<line x1="{mx(x_a):.1f}" y1="{my(y_a):.1f}" x2="{mx(x_b):.1f}" y2="{my(y_b):.1f}" stroke="#2563eb" stroke-width="2"/>')
+        for point in panel_points:
+            x = numeric(point.get("x"))
+            y = numeric(point.get("y"))
+            if x is None or y is None:
+                continue
+            label = compact_job_id(str(point.get("job_id") or ""))
+            parts.append(f'<circle cx="{mx(x):.1f}" cy="{my(y):.1f}" r="4" fill="#0f766e"><title>{escape(label)}</title></circle>')
+        parts.append(f'<text x="{x0 + plot_w / 2:.1f}" y="{y0 + plot_h + 38:.1f}" class="label" text-anchor="middle">{escape(column)}</text>')
+        parts.append(f'<text x="{x0 - 44:.1f}" y="{y0 + plot_h / 2:.1f}" class="label" text-anchor="middle" transform="rotate(-90 {x0 - 44:.1f} {y0 + plot_h / 2:.1f})">PB mean kJ/mol</text>')
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+def safe_filename(text: str) -> str:
+    name = re.sub(r"[^A-Za-z0-9_.-]+", "_", text.strip()).strip("._")
+    return name or "column"
+
+
+def format_svg_number(value: Any) -> str:
+    parsed = numeric(value)
+    if parsed is None:
+        return ""
+    if abs(parsed) >= 100:
+        return f"{parsed:.0f}"
+    if abs(parsed) >= 10:
+        return f"{parsed:.1f}"
+    return f"{parsed:.3g}"
 
 
 def first_column(rows: list[dict[str, float]], suffix: str) -> str | None:
@@ -1914,6 +2293,8 @@ def run_index_html(
     sort_by: str,
     *,
     include_samples: bool,
+    correlation_report: dict[str, Any],
+    correlation_svgs: dict[str, str],
 ) -> str:
     row_by_job = {str(row.get("job_id") or ""): row for row in rows}
     qc_by_job = {str(row.get("job_id") or ""): row for row in qc_rows}
@@ -1944,17 +2325,9 @@ def run_index_html(
         if rank == 1:
             job_cell = f'{job_cell} <span class="badge best">best</span>'
         score_cells = []
-        for _, fields in RUN_TABLE_GROUPS[:2]:
+        for _, fields in RUN_TABLE_GROUPS:
             for field, _, _, klass in fields:
                 score_cells.append(sortable_cell(summary.get(field), classes=klass))
-        partner_rmsd = qc.get("ligand_rmsd_mean") or qc.get("peptide_rmsd_mean")
-        qc_cells = [
-            sortable_cell(qc.get("receptor_rmsd_mean")),
-            sortable_cell(partner_rmsd),
-            sortable_cell(qc.get("native_contacts_mean")),
-            sortable_cell(qc.get("native_contacts_min")),
-            sortable_cell(qc.get("interface_distance_min")),
-        ]
         table_rows.append(
             "<tr>"
             f"{sortable_cell(rank, classes='sticky-rank')}"
@@ -1962,16 +2335,14 @@ def run_index_html(
             f"{qc_status_cell(status, traj_status, mmpbsa_status)}"
             f"{frames_cell(summary)}"
             f"{''.join(score_cells)}"
-            f"{''.join(qc_cells)}"
             "</tr>"
         )
     group_header = (
         '<tr class="group-row">'
         '<th class="sticky-rank" colspan="2">Identity</th>'
         '<th colspan="2">Run state</th>'
-        '<th colspan="4">PB score</th>'
-        '<th colspan="4">GB score</th>'
-        '<th colspan="5">Trajectory QC</th>'
+        '<th colspan="6">PB score</th>'
+        '<th colspan="6">GB score</th>'
         "</tr>"
     )
     identity_headers = (
@@ -1980,22 +2351,137 @@ def run_index_html(
         '<th>QC</th>'
         f"{sortable_header('Frames')}"
     )
-    score_headers = "".join(sortable_header(label, unit=unit, classes=klass) for _, fields in RUN_TABLE_GROUPS[:2] for _, label, unit, klass in fields)
-    qc_headers = "".join(sortable_header(label, unit=unit, classes=klass) for _, label, unit, klass in RUN_TABLE_GROUPS[2][1])
+    score_headers = "".join(sortable_header(label, unit=unit, classes=klass) for _, fields in RUN_TABLE_GROUPS for _, label, unit, klass in fields)
     ranking_table = (
         '<table class="wide sortable report-table"><thead>'
-        f"{group_header}<tr>{identity_headers}{score_headers}{qc_headers}"
+        f"{group_header}<tr>{identity_headers}{score_headers}"
         "</tr></thead><tbody>"
         + "".join(table_rows)
         + "</tbody></table>"
     )
+    qc_table = run_qc_table(qc_rows, include_samples=include_samples)
+    correlation_html = run_correlation_section(correlation_report, correlation_svgs)
     return full_html(
         "MMPBSA Group Report",
         [
             f'<section class="summary-section"><h2>Summary</h2>{metadata_strip(summary_items, title=str(run_dir))}</section>',
-            f'<section class="ranking-section"><h2>Ranking</h2>{ranking_table}</section>',
+            f'<section class="ranking-section"><h2>MMPBSA Results</h2>{ranking_table}{ranking_chart_html(ranking_svg)}</section>',
+            f'<section class="qc-section"><h2>Trajectory QC</h2>{qc_table}<div class="charts centered-charts"><div class="chart-panel centered-chart">{qc_svg}</div></div></section>',
+            correlation_html,
         ],
     )
+
+
+def ranking_chart_html(ranking_svg: str) -> str:
+    if not ranking_svg:
+        return ""
+    return f'<div class="charts"><div class="chart-panel">{ranking_svg}</div></div>'
+
+
+def run_qc_table(qc_rows: list[dict[str, Any]], *, include_samples: bool) -> str:
+    body: list[str] = []
+    for row in qc_rows:
+        job_id = str(row.get("job_id") or "")
+        job_html = f'<a href="samples/{url_component(job_id)}/index.html">{escape(job_id)}</a>' if include_samples else f"<code>{escape(job_id)}</code>"
+        partner_rmsd = row.get("ligand_rmsd_mean") or row.get("peptide_rmsd_mean")
+        values = {
+            "trajectory_qc_status": status_badge(str(row.get("trajectory_qc_status") or "unknown")),
+            "receptor_rmsd_mean": row.get("receptor_rmsd_mean"),
+            "partner_rmsd_mean": partner_rmsd,
+            "native_contacts_mean": row.get("native_contacts_mean"),
+            "native_contacts_min": row.get("native_contacts_min"),
+            "interface_distance_min": row.get("interface_distance_min"),
+            "qc_issue_count": row.get("qc_issue_count"),
+        }
+        cells = []
+        for field, _, _, klass in TRAJECTORY_QC_TABLE_FIELDS:
+            if field == "trajectory_qc_status":
+                cells.append(plain_cell(str(values[field])))
+            else:
+                cells.append(sortable_cell(values.get(field), classes=klass))
+        body.append("<tr>" f"{plain_cell(job_html, classes='job-cell')}" f"{''.join(cells)}" "</tr>")
+    headers = '<th>Job</th>' + "".join(sortable_header(label, unit=unit, classes=klass) for _, label, unit, klass in TRAJECTORY_QC_TABLE_FIELDS)
+    return '<table class="wide sortable report-table"><thead><tr>' + headers + "</tr></thead><tbody>" + "".join(body) + "</tbody></table>"
+
+
+def run_correlation_section(correlation_report: dict[str, Any], correlation_svgs: dict[str, str]) -> str:
+    rows = correlation_report.get("rows") or []
+    source = str(correlation_report.get("source_manifest") or "")
+    if not rows:
+        message = str(correlation_report.get("message") or "No numeric manifest correlation fields available.")
+        source_note = f"<p class=\"muted\">Manifest: <code>{escape(source)}</code></p>" if source else ""
+        return f'<section class="correlation-section"><h2>Correlation</h2>{source_note}<p class="muted">{escape(message)}</p></section>'
+    headers = [
+        ("manifest_column", "Manifest column", ""),
+        ("score_label", "Score metric", ""),
+        ("n", "n", ""),
+        ("pearson_r", "Pearson r", ""),
+        ("spearman_r", "Spearman r", ""),
+        ("slope", "Slope", ""),
+        ("intercept", "Intercept", ""),
+        ("status", "Status", ""),
+    ]
+    best = strongest_correlation_row(rows)
+    interpretation = ""
+    if best:
+        interpretation = (
+            f'<p class="muted">Strongest absolute Pearson correlation: '
+            f'<code>{escape(str(best.get("manifest_column")))}</code> vs '
+            f'<code>{escape(str(best.get("score_label")))}</code>, '
+            f'r={format_cell(best.get("pearson_r"))}, n={format_cell(best.get("n"))}. '
+            "This is a model/rescoring diagnostic, not experimental affinity validation.</p>"
+        )
+    source_note = f"<p class=\"muted\">Manifest: <code>{escape(source)}</code></p>" if source else ""
+    subsections = []
+    columns = list(correlation_report.get("columns") or sorted({str(row.get("manifest_column") or "") for row in rows if row.get("manifest_column")}))
+    for column in columns:
+        column_rows = [row for row in rows if str(row.get("manifest_column") or "") == column]
+        if not column_rows:
+            continue
+        table = correlation_column_table(column_rows, headers)
+        image = ""
+        if column in correlation_svgs:
+            image = f'<img class="svg-img" src="{escape(correlation_svgs[column])}" alt="{escape(column)} correlation scatter plot">'
+        subsections.append(
+            '<div class="correlation-subsection">'
+            f'<h3>{escape(column)}</h3>'
+            '<div class="correlation-grid">'
+            f'<div class="correlation-table">{table}</div>'
+            f'<div class="correlation-plot chart-panel">{image}</div>'
+            "</div>"
+            "</div>"
+        )
+    return f'<section class="correlation-section"><h2>Correlation</h2>{source_note}{interpretation}{"".join(subsections)}</section>'
+
+
+def correlation_column_table(rows: list[dict[str, Any]], headers: list[tuple[str, str, str]]) -> str:
+    body = []
+    display_headers = [(field, label, unit) for field, label, unit in headers if field != "manifest_column"]
+    for row in rows:
+        body.append(
+            "<tr>"
+            + "".join(sortable_cell(row.get(field)) if field not in {"score_label", "status"} else plain_cell(escape(str(row.get(field) or ""))) for field, _, _ in display_headers)
+            + "</tr>"
+        )
+    return (
+        '<table class="wide sortable report-table"><thead><tr>'
+        + "".join(sortable_header(label, unit=unit) for _, label, unit in display_headers)
+        + "</tr></thead><tbody>"
+        + "".join(body)
+        + "</tbody></table>"
+    )
+
+
+def strongest_correlation_row(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    candidates = [
+        (abs(float(value)), row)
+        for row in rows
+        for value in [numeric(row.get("pearson_r"))]
+        if value is not None
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
 
 
 def sample_index_html(
@@ -2132,10 +2618,11 @@ def base_css() -> str:
         ".card{border:1px solid var(--line);border-radius:8px;padding:12px;background:linear-gradient(180deg,#fff,#f8fafc)}.card b{display:block;font-size:11px;text-transform:uppercase;color:var(--muted)}.card span{display:block;margin-top:5px;font-size:14px;overflow-wrap:anywhere}.card.path span{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"
         ".meta-strip{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:stretch}.meta-item{display:flex;gap:7px;align-items:baseline;border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:#fbfcfe;min-height:34px}.meta-item b{font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.02em}.meta-item span{font-size:13px;font-weight:650;color:#1f2937}"
         ".action-row{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}.actions{display:flex;flex-wrap:wrap;gap:8px}.action-link{display:inline-flex;align-items:center;height:32px;padding:0 10px;border:1px solid #c9d6f5;border-radius:6px;background:#eff4ff}.compact-note{flex-basis:100%;margin:0}.movie-player{flex-basis:100%;width:100%;max-width:920px;margin:4px auto 0;border:1px solid var(--line);border-radius:8px;background:#000}.svg-img{display:block;width:100%;max-width:920px;height:auto}"
-        ".charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}.chart-panel{min-width:0;border:1px solid var(--line);border-radius:8px;padding:12px;background:#fff}section svg{width:100%;height:auto;max-width:900px;display:block}.plot-section svg,.plot-section .svg-img{margin-left:auto;margin-right:auto}"
+        ".charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}.centered-charts{justify-content:center}.chart-panel{min-width:0;border:1px solid var(--line);border-radius:8px;padding:12px;background:#fff}.centered-chart{width:min(960px,100%);margin-left:auto;margin-right:auto}section svg{width:100%;height:auto;max-width:900px;display:block}.plot-section svg,.plot-section .svg-img,.centered-chart svg,.centered-chart .svg-img{margin-left:auto;margin-right:auto}.correlation-subsection{margin-top:18px}.correlation-grid{display:grid;grid-template-columns:minmax(420px,1.05fr) minmax(360px,.95fr);gap:16px;align-items:start}.correlation-table,.correlation-plot{min-width:0}.correlation-plot .svg-img{margin-left:auto;margin-right:auto}"
         ".badge{display:inline-block;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700;background:#e5e7eb;color:#374151}.badge.best{margin-left:6px;background:#dbeafe;color:#1d4ed8}.muted{color:var(--muted)}"
         ".valid,.aligned,.rendered{background:#dcfce7;color:#166534}.invalid,.fail,.failed{background:#fee2e2;color:#991b1b}.warn,.warning{background:#fef3c7;color:#92400e}.skipped,.not_requested{background:#e0f2fe;color:#075985}"
         "iframe{width:100%;height:440px;border:1px solid var(--line);border-radius:8px;margin:10px 0;background:#fff}"
+        "@media (max-width:900px){.correlation-grid{grid-template-columns:1fr}}"
         "@media print{body{background:#fff}body:before{display:none}body>h1,body>section{max-width:none;margin:0 0 12px;padding-left:0;padding-right:0}section{box-shadow:none;border-color:#cfd6e4;break-inside:avoid}.wide{overflow:visible;white-space:normal}.sticky-rank,.sticky-job{position:static;box-shadow:none}th{position:static}.chart-panel{break-inside:avoid}}"
     )
 

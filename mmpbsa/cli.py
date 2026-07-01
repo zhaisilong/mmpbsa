@@ -246,6 +246,8 @@ def visualize_job_cmd(
 @click.option("--movie-stride", type=click.IntRange(1), default=5, show_default=True, help="Frame stride for aligned trajectory/movie PDB export.")
 @click.option("--movie", is_flag=True, help="Render and include movie.mp4 when local PyMOL and ffmpeg are available. Implies --pymol.")
 @click.option("--render-video", is_flag=True, help="Deprecated alias for --movie.")
+@click.option("--correlation-manifest", type=click.Path(path_type=Path, dir_okay=False), help="Optional CSV/TSV manifest with numeric fields to correlate against MMPBSA scores.")
+@click.option("--correlate-column", multiple=True, help="Manifest column to correlate. May be repeated; default auto-detects numeric non-identifier columns.")
 @click.option("--zip", "zip_archive", is_flag=True, help="Zip the complete generated report directory.")
 @click.option("--archive-name", help="Zip filename or stem for the complete generated report. Implies --zip.")
 def visualize_run_cmd(
@@ -262,6 +264,8 @@ def visualize_run_cmd(
     movie_stride: int,
     movie: bool,
     render_video: bool,
+    correlation_manifest: Path | None,
+    correlate_column: tuple[str, ...],
     zip_archive: bool,
     archive_name: str | None,
 ) -> None:
@@ -278,6 +282,8 @@ def visualize_run_cmd(
         align=align,
         movie_stride=movie_stride,
         render_video=render_movie,
+        correlation_manifest=correlation_manifest,
+        correlate_columns=list(correlate_column) or None,
         zip_archive=zip_archive,
         archive_name=archive_name,
     )
