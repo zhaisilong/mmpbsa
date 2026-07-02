@@ -474,9 +474,13 @@ def write_text_atomic(path: Path, text: str) -> None:
         raise
 
 
-def write_csv_atomic(path: Path, rows: list[dict[str, Any]]) -> None:
+def write_csv_atomic(
+    path: Path,
+    rows: list[dict[str, Any]],
+    fieldnames: list[str] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields: list[str] = []
+    fields: list[str] = list(fieldnames or [])
     for row in rows:
         for key in row:
             if key not in fields:

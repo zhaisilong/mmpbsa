@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from mmpbsa.aggregate import aggregate_run_dir
 from mmpbsa.analysis import add_dmm, write_trajectory_qc_csv
 from mmpbsa.common import aggregate_replica_values, frame_settings, gmx_runtime, load_profile, profile_with_replica_indices, replica_indices, replica_names, replica_seed_map, residue_atoms
 from mmpbsa.ligand import ligand_input_format, mol2_total_charge, run_ligand_prepare
@@ -792,6 +793,79 @@ class CoreTests(unittest.TestCase):
             job_dir = make_job(root, "alpha")
             with self.assertRaises(SystemExit):
                 FakeRunner(make_context(job_dir)).run(mode="md")
+
+    def test_empty_mode_fails_with_clear_message(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            job_dir = make_job(root, "alpha")
+            with self.assertRaisesRegex(SystemExit, "mode 'analysis' has no steps"):
+                FakeRunner(make_context(job_dir)).run(mode="analysis")
+
+    def test_aggregate_empty_run_writes_stable_headers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = root / "run"
+            run_dir.mkdir()
+            (run_dir / "unfinished").mkdir()
+
+            report = aggregate_run_dir(run_dir, root / "aggregate")
+
+            self.assertEqual(report["jobs_total"], 1)
+            self.assertEqual(report["jobs_completed"], 0)
+            summary_header = (
+                (root / "aggregate" / "summary.csv")
+                .read_text(encoding="utf-8")
+                .splitlines()[0]
+            )
+            qc_header = (
+                (root / "aggregate" / "qc_summary.csv")
+                .read_text(encoding="utf-8")
+                .splitlines()[0]
+            )
+            self.assertEqual(
+                summary_header,
+                "job_id,name,status,GB_delta_total_kJ_mol,PB_delta_total_kJ_mol,"
+                "trajectory_qc_status,mmpbsa_qc_status,mmpbsa_frames,trajectory_frames,job_dir",
+            )
+            self.assertEqual(
+                qc_header,
+                "job_id,status,trajectory_qc_status,mmpbsa_qc_status,mmpbsa_frames,trajectory_frames",
+            )
+
+    def test_aggregate_completed_run_keeps_summary_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = root / "run"
+            run_dir.mkdir()
+            job_dir = make_job(run_dir, "alpha")
+            (job_dir / "result").mkdir()
+            (job_dir / "result" / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "job_id": "alpha",
+                        "status": "valid",
+                        "trajectory_qc_status": "valid",
+                        "mmpbsa_qc_status": "valid",
+                        "mmpbsa_frames": 303,
+                        "trajectory_frames": 1501,
+                        "custom_metric": 7,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            report = aggregate_run_dir(run_dir, root / "aggregate")
+
+            self.assertEqual(report["jobs_total"], 1)
+            self.assertEqual(report["jobs_completed"], 1)
+            with (root / "aggregate" / "summary.csv").open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            with (root / "aggregate" / "qc_summary.csv").open(newline="", encoding="utf-8") as handle:
+                qc_rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]["custom_metric"], "7")
+            self.assertEqual(rows[0]["job_dir"], str(job_dir))
+            self.assertEqual(qc_rows[0]["job_id"], "alpha")
+            self.assertEqual(qc_rows[0]["mmpbsa_frames"], "303")
 
     def test_align_gro_to_top_molecule_order(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

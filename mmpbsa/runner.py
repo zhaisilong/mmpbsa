@@ -110,6 +110,8 @@ class DoneFileRunner:
             raise SystemExit("--resume and --force are mutually exclusive")
         self.ensure_dirs()
         selected = self.mode_steps(mode)
+        if not selected:
+            raise SystemExit(f"{self.context.job_id}: mode {mode!r} has no steps")
         if force:
             self.clear_from_step(selected[0])
         self.ensure_previous_steps_done(selected[0])
