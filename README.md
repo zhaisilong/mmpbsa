@@ -16,9 +16,9 @@ manifest。QC BLOCK 是科学排除，不伪装成计算崩溃。独立 finalize
 ## 安装
 
 ```bash
-python -m pip install -e '.[parmed,test]'
+python -m pip install -e '.[preparation,test]'
 # 可选：OpenMM 及 engine-neutral 轨迹处理
-python -m pip install -e '.[openmm,test]'
+python -m pip install -e '.[openmm,preparation,test]'
 ```
 
 环境与原生依赖见 [environment.md](docs/environment.md)。GROMACS、AmberTools 等
@@ -77,7 +77,18 @@ gate 通过。资源协调、恢复与导出方式见 [scheduling.md](docs/sched
 
 [文档索引](docs/README.md) 包含架构、环境、调度和可选引擎说明。公开输入与验证
 步骤见 [小分子验证](validations/tyk2_3x5ns/README.md)及
-[蛋白–多肽验证](validations/sp2016_3x5ns/README.md)。仓库不包含本地计算输出。
+[蛋白–多肽验证](validations/sp2016_3x5ns/README.md)。已追踪的验证输入保留
+其上游来源和许可；本地计算产物不属于发布内容。
 
 0.7 执行 workflow v3，不将旧 workflow/workspace 转换为可复用的当前 attempt；旧
 记录仅支持只读 inventory。完整契约见 [architecture.md](docs/architecture.md)。
+
+## 开发与发布
+
+框架在同一仓库的 `main` 开发和发布。本地工作区可以保留被 Git 忽略的运行结果、
+已准备体系及本机 runtime 配置；提交前须人工检查暂存内容和待推送历史，确保这些
+内容及其他敏感信息没有进入提交。发布检查、推送防护与其局限见
+[环境与发布](docs/environment.md)。
+
+已有计算的 receipt 和代码指纹应保持原样：旧历史不可查询或当前测试通过，都不能
+证明历史计算使用了当前版本。

@@ -31,3 +31,33 @@ modules cannot be silently omitted from the pre-commit wheel audit.
 audit a clean source snapshot, install its wheel in an isolated environment and
 check provider discovery. Optional OpenMM acceptance gates are described in
 [openmm.md](openmm.md); a past workspace does not validate a changed snapshot.
+
+## Git publication and local results
+
+Develop and publish from the same `main` repository. Public validation source
+structures and literature measurements remain tracked with their provenance and
+licences. Local workspaces, prepared structures, trajectories, logs, reports,
+scores and host-specific runtime files are not publication inputs; they may
+remain in ignored directories of the local checkout. Never use cleanup commands
+that remove ignored files as a release preparation step.
+
+Install the local pre-push guard once and inspect outgoing commits before pushing:
+
+```bash
+python scripts/publication_audit.py install-hook
+python scripts/publication_audit.py check
+```
+
+The guard permits only fast-forward pushes to `origin/main`, and installation
+refuses to overwrite a different existing hook or custom hooks path. Before
+committing and pushing, review the staged paths, contents and outgoing history by
+hand. Confirm that no local project data, private paths or credentials are
+present, including in an earlier commit whose files were later deleted.
+Automated publication checks and Git hooks only screen known patterns; an
+unrecognized secret or result may pass, and hooks can be bypassed. They do not
+replace manual review or protect files that have already been published.
+
+Preserve existing scientific receipts, file hashes and source fingerprints
+unchanged. A historical receipt may refer to a commit that is no longer present
+locally; the current source and its tests are not evidence that the old run was
+performed with the current version.
