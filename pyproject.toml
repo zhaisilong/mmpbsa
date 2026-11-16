@@ -24,6 +24,8 @@ test = [
   "ruff>=0.6",
   "mypy>=1.10",
   "build>=1.2",
+  "setuptools>=68",
+  "wheel>=0.41",
   "tomli>=2; python_version < '3.11'",
 ]
 
