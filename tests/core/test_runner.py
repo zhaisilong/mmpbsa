@@ -4,6 +4,7 @@ import hashlib
 import json
 import threading
 from collections.abc import Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -48,6 +49,7 @@ from mmpbsa.core.providers import ProviderRegistry
 from mmpbsa.core.runner import WorkflowRunner
 from mmpbsa.core.state import AttemptState, QcVerdict, StageId, WorkflowOutcome
 from mmpbsa.utils import sha256_digest
+from mmpbsa.utils.cpu import PhysicalCpu
 
 _Coordinate = tuple[str, str, str, str | None]
 
@@ -784,7 +786,12 @@ def test_pipeline_qc_block_and_other_replica_continue(tmp_path):
     )
 
 
-def test_pipeline_physical_provenance_does_not_change_identity(tmp_path):
+def test_pipeline_physical_provenance_does_not_change_identity(tmp_path, monkeypatch):
+    # Exercise allocation provenance independently of the test host's CPU count.
+    inventory = tuple(PhysicalCpu(cpu_id=i, package_id=0, core_id=i, numa_id=0) for i in range(8))
+    monkeypatch.setattr("mmpbsa.core.resources.physical_cpu_inventory", lambda: inventory)
+    monkeypatch.setattr("mmpbsa.core.pipeline.thread_cpu_affinity", lambda _: nullcontext())
+    monkeypatch.setattr("mmpbsa.core.runner.thread_cpu_affinity", lambda _: nullcontext())
     project = _pipeline_project(_project(tmp_path / "project"))
     runner = _runner(project, tmp_path / "workspace")
     original = runner.run_batch()
