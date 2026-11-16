@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_18",
+  "pdb_id": "2R7G",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "2R7G",
+    "url": "https://files.rcsb.org/download/2R7G.cif",
+    "path": "sources/mmcif/2R7G.cif",
+    "sha256": "5cc9f44e22aa27f8fbfaf55ce31ec9de9bf8ac6a406a0854494f9cb702ff3284",
+    "bytes": 671757,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2024-02-21",
+    "resolution_angstrom": 1.671
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Retinoblastoma-associated protein",
+    "peptide_name": "Early E1A 32 kDa protein peptide",
+    "experimental_delta_g_kj_mol": -33.3,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -1213.4,
+      "dmm_pbsa": -462.7,
+      "vdw": -226.7,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A"
+      ],
+      "label_asym_ids": [
+        "A"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "380-581,643-787",
+          "observed_residues": "380-502,509-578,643-785",
+          "complete": false
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "B"
+      ],
+      "label_asym_ids": [
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "40-49",
+          "observed_residues": "40-49",
+          "complete": true
+        }
+      ],
+      "declared_sequence": "PPTLHELYDL",
+      "observed_sequence": "PPTLHELYDL",
+      "complete": true,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [
+      "exclude SO4 A902"
+    ],
+    "altloc_residues": [],
+    "declared_connections": []
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A polymer after internal-gap modeling",
+      "auth B polymer as peptide ligand"
+    ],
+    "explicit_exclude": [
+      "SO4 A902",
+      "other crystal copies C/D/E",
+      "all crystallographic water"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "rejected",
+    "reason_codes": [
+      "RECEPTOR_INTERNAL_GAPS"
+    ],
+    "reasons": [
+      "Receptor A lacks internal residues 503-508 and 579-581; terminal residues 786-787 are also absent."
+    ],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "Observed residues are ff14SB-compatible, but two internal receptor gaps cannot be silently joined."
+  },
+  "build": {
+    "status": "blocked",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Provide reproducible models or segmented treatment for both internal gaps."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

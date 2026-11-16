@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "created_on": "2026-08-07",
+  "coordinate_sources": {
+    "provider": "RCSB Protein Data Bank",
+    "canonical_url_template": "https://files.rcsb.org/download/{PDB_ID}.cif",
+    "retrieval_method": "Direct HTTPS download of current accession mmCIF files",
+    "integrity": "Per-file SHA-256 and byte length are pinned in catalog and model files",
+    "license_id": "CC0-1.0",
+    "transformations": "None; sources/mmcif files are byte-identical downloads"
+  },
+  "benchmark_source": {
+    "citation": "Spiliotopoulos A, et al. dMM-PBSA: A New HADDOCK Scoring Function for Protein-Peptide Docking. Front Mol Biosci. 2016;3:46.",
+    "doi": "10.3389/fmolb.2016.00046",
+    "article_url": "https://doi.org/10.3389/fmolb.2016.00046",
+    "license_id": "CC-BY-4.0",
+    "legacy_transcription_lineage": "The case labels and paper-score transcription originated in the predecessor repository's spiliotopoulos2016_dmm_pbsa data tables; no machine-specific path is part of this portable validation record.",
+    "audit_boundary": "Labels were inherited from the local v1 transcription; current RCSB sources were independently hash-pinned, but the paper HADDOCK endpoint protocol is not reproduced here."
+  },
+  "excluded_legacy_material": {
+    "copied_code": false,
+    "copied_trajectories": false,
+    "copied_topologies": false,
+    "note": "Legacy paths are provenance references only."
+  }
+}

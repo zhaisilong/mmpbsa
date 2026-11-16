@@ -1,0 +1,85 @@
+{
+  "schema_version": "mmpbsa.validation.provenance.v1",
+  "dataset": {
+    "name": "openforcefield/protein-ligand-benchmark",
+    "title": "Protein-Ligand Benchmark Dataset for Free Energy Calculations",
+    "repository": "https://github.com/openforcefield/protein-ligand-benchmark.git",
+    "git_commit": "fd88824f9114244f95a14b485e6d6c96c1de716d",
+    "doi": "10.5281/zenodo.4813735",
+    "citation_file": "CITATION.cff"
+  },
+  "license": {
+    "spdx": "CC-BY-4.0",
+    "copyright": "Copyright (c) 2020, Open Forcefield Group",
+    "local_file": "LICENSE_DATA",
+    "sha256": "58fcdeccdb01af4a549415b40a089ffaacabe5241dd62555da12f7b10210f74f"
+  },
+  "target": {
+    "name": "tyk2",
+    "pdb_id": "4GIH",
+    "chain": "A",
+    "associated_set": "Schrodinger JACS",
+    "measurement_references": [
+      "10.1016/j.ejmech.2013.03.070",
+      "10.1021/jm400266t"
+    ],
+    "calculation_references": [
+      "10.1021/ja512751q",
+      "10.1039/C9SC03754C"
+    ]
+  },
+  "upstream_files": {
+    "data/tyk2/00_data/target.yml": {
+      "sha256": "432baa7a74d8467d59bf91e34226f1162a700c29a342b104e07b4ab938da803b"
+    },
+    "data/tyk2/00_data/ligands.yml": {
+      "sha256": "8a74c0eb54aa406cb95dbc490b341287242d8d4b7152ff61c20eb1f8aaa6923e"
+    },
+    "data/tyk2/01_protein/crd/protein.pdb": {
+      "sha256": "9090684f4bdae90afbe5f2698a14c778396c024c19ceb6333de4808d9e29fae6"
+    },
+    "data/tyk2/02_ligands/ligands.sdf": {
+      "sha256": "410f683fa990bb8dc094521746d3aaa0c5b1134f716d9c35d45d3352db1ddffd"
+    }
+  },
+  "local_inputs": {
+    "receptor.pdb": {
+      "source": "data/tyk2/01_protein/crd/protein.pdb",
+      "copy": "byte_exact",
+      "sha256": "9090684f4bdae90afbe5f2698a14c778396c024c19ceb6333de4808d9e29fae6",
+      "notes": [
+        "Prepared, explicitly hydrogenated Maestro receptor; this is not a raw PDB download.",
+        "Contains 288 standard amino acids, ACE A889, NME A1178, and two crystallographic waters."
+      ]
+    },
+    "ligands/lig_ejm_31.sdf": {
+      "source_record": "lig_ejm_31",
+      "extraction": "byte-exact named record including the $$$$ terminator",
+      "sha256": "4baf25a764a85245e55d310cd36ef6f13f8d768c1d89687c4b79a0adc60a0842"
+    },
+    "ligands/lig_ejm_43.sdf": {
+      "source_record": "lig_ejm_43",
+      "extraction": "byte-exact named record including the $$$$ terminator",
+      "sha256": "3371db5e3d697cc3e4248581c4f3ea7b46e12e5e5939ba33f4613ab452a5d816"
+    },
+    "ligands/lig_ejm_46.sdf": {
+      "source_record": "lig_ejm_46",
+      "extraction": "byte-exact named record including the $$$$ terminator",
+      "sha256": "0cc33989d459bc3709dfbbde569329c67b35927c6e4762d7c642a9fe23eb65b2"
+    },
+    "ligands/lig_ejm_50.sdf": {
+      "source_record": "lig_ejm_50",
+      "extraction": "byte-exact named record including the $$$$ terminator",
+      "sha256": "aec2906d29e1e1179b28922163a4c0e94ede9c2185653f63203eab067e9ace91"
+    },
+    "ligands/lig_ejm_54.sdf": {
+      "source_record": "lig_ejm_54",
+      "extraction": "byte-exact named record including the $$$$ terminator",
+      "sha256": "23696eb118f93786f1556758e5ea78eec3e8d70f9bdb461613108fa5eb997b11"
+    }
+  },
+  "attribution": [
+    "David F. Hahn and contributors, Protein-Ligand Benchmark Dataset for Free Energy Calculations.",
+    "Open Force Field protein-ligand-benchmark dataset, CC BY 4.0."
+  ]
+}

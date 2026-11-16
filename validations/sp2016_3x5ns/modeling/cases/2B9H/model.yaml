@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_12",
+  "pdb_id": "2B9H",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "2B9H",
+    "url": "https://files.rcsb.org/download/2B9H.cif",
+    "path": "sources/mmcif/2B9H.cif",
+    "sha256": "fe6f45d106409196732719d7070195e2c19dd20194ce2d2560e636e34965415d",
+    "bytes": 402533,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2023-08-23",
+    "resolution_angstrom": 1.55
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Mitogen-activated protein kinase FUS3",
+    "peptide_name": "Serine/threonine-protein kinase STE7 peptide",
+    "experimental_delta_g_kj_mol": -40.44,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -993.9,
+      "dmm_pbsa": -450.6,
+      "vdw": -243.6,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A"
+      ],
+      "label_asym_ids": [
+        "A"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "1-353",
+          "observed_residues": "1-163,180-353",
+          "complete": false
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "C"
+      ],
+      "label_asym_ids": [
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "C",
+          "label_asym_id": "B",
+          "declared_residues": "9-22",
+          "observed_residues": "9-20",
+          "complete": false
+        }
+      ],
+      "declared_sequence": "RRNLKGLNLNLHPD",
+      "observed_sequence": "RRNLKGLNLNLH",
+      "complete": false,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [
+      "include ADP A500",
+      "include Mg A700"
+    ],
+    "altloc_residues": [],
+    "declared_connections": [
+      "Mg700 coordinates A:ASP142, A:ASP155, ADP O2A/O3B, and two deposited waters"
+    ],
+    "required_structural_waters": [
+      "HOH A900 coordinated to Mg A700 at 2.105 angstrom",
+      "HOH A901 coordinated to Mg A700 at 2.101 angstrom"
+    ]
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A polymer plus ADP A500, Mg A700, and its coordinated HOH A900/A901 as receptor",
+      "auth C only after gaps are resolved"
+    ],
+    "explicit_exclude": [
+      "ordinary crystallographic water only after auditing the Mg shell"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "rejected",
+    "reason_codes": [
+      "PEPTIDE_RESIDUES_MISSING",
+      "RECEPTOR_INTERNAL_GAP",
+      "REQUIRED_NUCLEOTIDE_METAL_MODEL_UNAVAILABLE"
+    ],
+    "reasons": [
+      "Peptide C lacks declared PRO21 and ASP22.",
+      "Receptor A has an unresolved internal segment 164-179.",
+      "ADP A500 and coordinated Mg A700 lack a validated case-local model."
+    ],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "ff14SB alone does not cover ADP/Mg; the internal receptor gap and missing peptide tail also require modeling."
+  },
+  "build": {
+    "status": "blocked",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Resolve receptor internal gap and peptide tail.",
+      "Create a validated ADP/Mg model that explicitly preserves and audits coordinating HOH A900/A901."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

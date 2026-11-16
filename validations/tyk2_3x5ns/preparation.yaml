@@ -1,0 +1,57 @@
+schema_version: mmpbsa.preparation.v1
+case_id: lig_ejm_31
+
+entities:
+  receptor:
+    entity_id: receptor_protein
+    kind: protein
+    source:
+      path: data/receptor.pdb
+      sha256: 9090684f4bdae90afbe5f2698a14c778396c024c19ceb6333de4808d9e29fae6
+
+  ligand:
+    entity_id: ligand
+    kind: small_molecule
+    source:
+      path: data/ligands/lig_ejm_31.sdf
+      sha256: 4baf25a764a85245e55d310cd36ef6f13f8d768c1d89687c4b79a0adc60a0842
+    residue_name: LIG
+    formal_charge: 0
+    charge_method: bcc
+    atom_type: gaff2
+    force_field: gaff2
+
+  # These are explicit MD entities, not anonymous bulk solvent. Both remain
+  # in the solvated MD system and are excluded from the dry GB/PB endpoints.
+  crystal_waters:
+    - entity_id: crystal_water_A_1318
+      chain_id: A
+      residue_number: 1318
+      residue_name: HOH
+    - entity_id: crystal_water_A_1325
+      chain_id: A
+      residue_number: 1325
+      residue_name: HOH
+
+force_fields:
+  protein: ff14SB
+  water: tip3p
+  pb_radii: mbondi2
+
+solvation:
+  shape: truncated_octahedron
+  padding_angstrom: 10.0
+  salt_concentration_molar: 0.15
+
+interface:
+  cutoff_angstrom: 5.0
+
+expectations:
+  receptor_protein_atoms: 4652
+  receptor_protein_residues: 290
+  ligand_atoms: 32
+  crystal_water_atoms: 6
+  histidine_states:
+    HID: 6
+    HIE: 7
+

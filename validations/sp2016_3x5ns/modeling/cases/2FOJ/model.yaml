@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_14",
+  "pdb_id": "2FOJ",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "2FOJ",
+    "url": "https://files.rcsb.org/download/2FOJ.cif",
+    "path": "sources/mmcif/2FOJ.cif",
+    "sha256": "977002b290eb35cd40531078b2b75900fe1b6d47928c3bfc2c9440c110485e07",
+    "bytes": 183097,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2023-08-30",
+    "resolution_angstrom": 1.6
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Ubiquitin carboxyl-terminal hydrolase 7",
+    "peptide_name": "p53 peptide 364-367",
+    "experimental_delta_g_kj_mol": -26.66,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -622.6,
+      "dmm_pbsa": -293.1,
+      "vdw": -177.5,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A"
+      ],
+      "label_asym_ids": [
+        "A"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "51-205",
+          "observed_residues": "63-105,112-205",
+          "complete": false
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "B"
+      ],
+      "label_asym_ids": [
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "361-367",
+          "observed_residues": "361-367",
+          "complete": true
+        }
+      ],
+      "declared_sequence": "GARAHSS",
+      "observed_sequence": "GARAHSS",
+      "complete": true,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [],
+    "altloc_residues": [],
+    "declared_connections": []
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A polymer after internal-gap modeling",
+      "auth B polymer as peptide ligand"
+    ],
+    "explicit_exclude": [
+      "all crystallographic water"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "rejected",
+    "reason_codes": [
+      "RECEPTOR_INTERNAL_GAP"
+    ],
+    "reasons": [
+      "Receptor residues 106-111 are absent inside the selected domain; residues 51-62 are also absent at the N terminus."
+    ],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "Observed residues are ff14SB-compatible, but the internal receptor gap cannot be implicitly joined."
+  },
+  "build": {
+    "status": "blocked",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Provide a reproducible model or segmented treatment for residues 106-111."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

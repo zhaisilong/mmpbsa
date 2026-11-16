@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_04",
+  "pdb_id": "1PZ5",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "1PZ5",
+    "url": "https://files.rcsb.org/download/1PZ5.cif",
+    "path": "sources/mmcif/1PZ5.cif",
+    "sha256": "ffebd32c3e5c83eb567f5d00d3686a000fded3a48126841b306fdb10b5981079",
+    "bytes": 438266,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2024-10-30",
+    "resolution_angstrom": 1.8
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Antibody SYA/J6",
+    "peptide_name": "MDWNMHAA peptide",
+    "experimental_delta_g_kj_mol": -30.76,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -855.4,
+      "dmm_pbsa": -406.9,
+      "vdw": -252.3,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A",
+        "B"
+      ],
+      "label_asym_ids": [
+        "A",
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "1-27,27A,27B,27C,27D,27E,28-95,97-211",
+          "observed_residues": "1-27,27A,27B,27C,27D,27E,28-95,97-211",
+          "complete": true
+        },
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "1-52,52A,52B,52C,53-82,82A,82B,82C,83-100,100A,101-213",
+          "observed_residues": "1-52,52A,52B,52C,53-82,82A,82B,82C,83-100,100A,101-213",
+          "complete": true
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "C"
+      ],
+      "label_asym_ids": [
+        "C"
+      ],
+      "segments": [
+        {
+          "auth_chain": "C",
+          "label_asym_id": "C",
+          "declared_residues": "1-8",
+          "observed_residues": "1-8",
+          "complete": true
+        }
+      ],
+      "declared_sequence": "MDWNMHAA",
+      "observed_sequence": "MDWNMHAA",
+      "complete": true,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [],
+    "altloc_residues": [],
+    "declared_connections": [
+      "disulfide A:CYS23-A:CYS88",
+      "disulfide A:CYS134-A:CYS194",
+      "disulfide B:CYS22-B:CYS92",
+      "disulfide B:CYS140-B:CYS195"
+    ]
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A and B polymers together as receptor",
+      "auth C polymer as peptide ligand",
+      "four declared receptor disulfides"
+    ],
+    "explicit_exclude": [
+      "all crystallographic water"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "eligible",
+    "reason_codes": [],
+    "reasons": [],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "ff14SB is suitable, but construction must preserve insertion codes and explicitly assign four CYX disulfides."
+  },
+  "build": {
+    "status": "not_implemented",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Use insertion-code-aware residue identity.",
+      "Assign and verify all four receptor disulfides."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

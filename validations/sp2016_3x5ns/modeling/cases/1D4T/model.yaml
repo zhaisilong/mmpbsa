@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_02",
+  "pdb_id": "1D4T",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "1D4T",
+    "url": "https://files.rcsb.org/download/1D4T.cif",
+    "path": "sources/mmcif/1D4T.cif",
+    "sha256": "457dfced81163b5906699dc0bc0697005be699f135a2eb9bcb01c3440e7bf7a2",
+    "bytes": 261454,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2024-02-07",
+    "resolution_angstrom": 1.1
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "T cell signal transduction molecule SAP",
+    "peptide_name": "Signaling lymphocytic activation molecule peptide",
+    "experimental_delta_g_kj_mol": -35.26,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -987.5,
+      "dmm_pbsa": -467.3,
+      "vdw": -282.9,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A"
+      ],
+      "label_asym_ids": [
+        "A"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "1-104",
+          "observed_residues": "1-104",
+          "complete": true
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "B"
+      ],
+      "label_asym_ids": [
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "276-286",
+          "observed_residues": "276-286",
+          "complete": true
+        }
+      ],
+      "declared_sequence": "KSLTIYAQVQK",
+      "observed_sequence": "KSLTIYAQVQK",
+      "complete": true,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [],
+    "altloc_residues": [
+      "A:SER12",
+      "A:SER28",
+      "A:GLU60",
+      "A:SER65",
+      "A:ARG75",
+      "A:ARG78",
+      "A:ILE84",
+      "A:SER85",
+      "A:LYS104"
+    ],
+    "declared_connections": []
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A polymer as receptor",
+      "auth B polymer as peptide ligand"
+    ],
+    "explicit_exclude": [
+      "all crystallographic water",
+      "discarded receptor alternate conformers after deterministic selection"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "eligible",
+    "reason_codes": [],
+    "reasons": [],
+    "scientific_risk": "low"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "ff14SB-compatible standard residues; choose highest-occupancy altloc and break exact ties with A."
+  },
+  "build": {
+    "status": "not_implemented",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Select and record source altlocs."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

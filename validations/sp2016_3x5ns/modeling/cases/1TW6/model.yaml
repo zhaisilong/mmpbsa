@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_08",
+  "pdb_id": "1TW6",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "1TW6",
+    "url": "https://files.rcsb.org/download/1TW6.cif",
+    "path": "sources/mmcif/1TW6.cif",
+    "sha256": "27386d04da011d691ce0f14821292dd4d1d767bf664cd95d665e24ef61cdaec7",
+    "bytes": 260085,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2023-08-23",
+    "resolution_angstrom": 1.713
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Baculoviral IAP repeat-containing protein 7",
+    "peptide_name": "Diablo homolog mitochondrial peptide",
+    "experimental_delta_g_kj_mol": -42.87,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -469.7,
+      "dmm_pbsa": -286.5,
+      "vdw": -208.2,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "B"
+      ],
+      "label_asym_ids": [
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "40-172",
+          "observed_residues": "78-172",
+          "complete": false
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "D"
+      ],
+      "label_asym_ids": [
+        "D"
+      ],
+      "segments": [
+        {
+          "auth_chain": "D",
+          "label_asym_id": "D",
+          "declared_residues": "1-9",
+          "observed_residues": "1-6",
+          "complete": false
+        }
+      ],
+      "declared_sequence": "AVPIAQKSE",
+      "observed_sequence": "AVPIAQ",
+      "complete": false,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [
+      "include ZN B1001",
+      "exclude LI B1002",
+      "exclude BTB B331",
+      "exclude EDO B441/B442"
+    ],
+    "altloc_residues": [],
+    "declared_connections": [
+      "B:CYS124-SG to ZN1001",
+      "B:CYS127-SG to ZN1001",
+      "B:HIS144-NE2 to ZN1001",
+      "B:CYS151-SG to ZN1001"
+    ]
+  },
+  "structure_decisions": {
+    "include": [
+      "auth B polymer plus structural ZN B1001 as receptor",
+      "auth D only after missing ligand residues are resolved"
+    ],
+    "explicit_exclude": [
+      "LI B1002, BTB B331, EDO B441/B442",
+      "other crystal-copy polymers A and C",
+      "ordinary crystallographic water"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "rejected",
+    "reason_codes": [
+      "PEPTIDE_RESIDUES_MISSING",
+      "REQUIRED_METAL_MODEL_UNAVAILABLE",
+      "RECEPTOR_TERMINUS_MISSING"
+    ],
+    "reasons": [
+      "Peptide D lacks declared LYS7-SER8-GLU9.",
+      "Receptor B contains structural Zn B1001 without a validated case-local model.",
+      "Receptor B residues 40-77 are absent."
+    ],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "ff14SB alone does not cover the structural Zn site, and the peptide is incomplete."
+  },
+  "build": {
+    "status": "blocked",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Resolve missing peptide residues.",
+      "Create a validated receptor Zn model."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

@@ -1,0 +1,473 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "description": "Spiliotopoulos 2016 protein-peptide benchmark modeling catalog",
+  "eligibility_contract": {
+    "eligible_count": 9,
+    "rejected_count": 10,
+    "eligible_pdb_ids": [
+      "1D4T",
+      "1MFG",
+      "1PZ5",
+      "1T4F",
+      "1X2R",
+      "2AK5",
+      "2HO2",
+      "2HPL",
+      "2O9V"
+    ],
+    "meaning": "eligible means scientifically admitted to case-specific modeling; it does not mean a topology exists"
+  },
+  "cases": [
+    {
+      "case_id": "sp2016_01",
+      "pdb_id": "1CKA",
+      "status": "rejected",
+      "model_file": "modeling/cases/1CKA/model.yaml",
+      "prepare_file": "modeling/cases/1CKA/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "PEPTIDE_TERMINAL_ATOM_MISSING"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1CKA",
+        "url": "https://files.rcsb.org/download/1CKA.cif",
+        "path": "sources/mmcif/1CKA.cif",
+        "sha256": "e6e569ee5d6f7b3f7bb765b01e4511dcb77990f727848c67db9c001f72ad0d43",
+        "bytes": 143341,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2024-02-07",
+        "resolution_angstrom": 1.5
+      },
+      "experimental_delta_g_kj_mol": -31.84
+    },
+    {
+      "case_id": "sp2016_02",
+      "pdb_id": "1D4T",
+      "status": "eligible",
+      "model_file": "modeling/cases/1D4T/model.yaml",
+      "prepare_file": "modeling/cases/1D4T/prepare.py",
+      "expected_outcome": "eligible_preflight_passed",
+      "reason_codes": [],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1D4T",
+        "url": "https://files.rcsb.org/download/1D4T.cif",
+        "path": "sources/mmcif/1D4T.cif",
+        "sha256": "457dfced81163b5906699dc0bc0697005be699f135a2eb9bcb01c3440e7bf7a2",
+        "bytes": 261454,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2024-02-07",
+        "resolution_angstrom": 1.1
+      },
+      "experimental_delta_g_kj_mol": -35.26
+    },
+    {
+      "case_id": "sp2016_03",
+      "pdb_id": "1MFG",
+      "status": "eligible",
+      "model_file": "modeling/cases/1MFG/model.yaml",
+      "prepare_file": "modeling/cases/1MFG/prepare.py",
+      "expected_outcome": "eligible_preflight_passed",
+      "reason_codes": [],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1MFG",
+        "url": "https://files.rcsb.org/download/1MFG.cif",
+        "path": "sources/mmcif/1MFG.cif",
+        "sha256": "5d44bc5d384190877cd2af56ed22fead80f6836237475325d18ea615d4c3c84c",
+        "bytes": 225194,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2024-02-14",
+        "resolution_angstrom": 1.25
+      },
+      "experimental_delta_g_kj_mol": -24.51
+    },
+    {
+      "case_id": "sp2016_04",
+      "pdb_id": "1PZ5",
+      "status": "eligible",
+      "model_file": "modeling/cases/1PZ5/model.yaml",
+      "prepare_file": "modeling/cases/1PZ5/prepare.py",
+      "expected_outcome": "eligible_preflight_passed",
+      "reason_codes": [],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1PZ5",
+        "url": "https://files.rcsb.org/download/1PZ5.cif",
+        "path": "sources/mmcif/1PZ5.cif",
+        "sha256": "ffebd32c3e5c83eb567f5d00d3686a000fded3a48126841b306fdb10b5981079",
+        "bytes": 438266,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2024-10-30",
+        "resolution_angstrom": 1.8
+      },
+      "experimental_delta_g_kj_mol": -30.76
+    },
+    {
+      "case_id": "sp2016_05",
+      "pdb_id": "1SE0",
+      "status": "rejected",
+      "model_file": "modeling/cases/1SE0/model.yaml",
+      "prepare_file": "modeling/cases/1SE0/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "RECEPTOR_TERMINI_MISSING",
+        "REQUIRED_METAL_MODEL_UNAVAILABLE"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1SE0",
+        "url": "https://files.rcsb.org/download/1SE0.cif",
+        "path": "sources/mmcif/1SE0.cif",
+        "sha256": "92ff7ba36275bc3c1ec7f4d0cb4cb3f70316fcf55ed406cbb272a24b36aae30e",
+        "bytes": 159010,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2024-02-14",
+        "resolution_angstrom": 1.75
+      },
+      "experimental_delta_g_kj_mol": -39.89
+    },
+    {
+      "case_id": "sp2016_06",
+      "pdb_id": "1T4F",
+      "status": "eligible",
+      "model_file": "modeling/cases/1T4F/model.yaml",
+      "prepare_file": "modeling/cases/1T4F/prepare.py",
+      "expected_outcome": "eligible_preflight_passed",
+      "reason_codes": [],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1T4F",
+        "url": "https://files.rcsb.org/download/1T4F.cif",
+        "path": "sources/mmcif/1T4F.cif",
+        "sha256": "20f0f3935f327cc7c66000f76d247b1c641edff21fc3f224ecbae986c9e0dbe2",
+        "bytes": 136164,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2023-08-23",
+        "resolution_angstrom": 1.9
+      },
+      "experimental_delta_g_kj_mol": -40.44
+    },
+    {
+      "case_id": "sp2016_07",
+      "pdb_id": "1T7R",
+      "status": "rejected",
+      "model_file": "modeling/cases/1T7R/model.yaml",
+      "prepare_file": "modeling/cases/1T7R/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "REQUIRED_ORGANIC_COFACTOR_MODEL_UNAVAILABLE"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1T7R",
+        "url": "https://files.rcsb.org/download/1T7R.cif",
+        "path": "sources/mmcif/1T7R.cif",
+        "sha256": "3381237ff04e0a7f3f32302daee791469263b9d4e4465a483af015049096dbac",
+        "bytes": 282974,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2024-02-14",
+        "resolution_angstrom": 1.4
+      },
+      "experimental_delta_g_kj_mol": -33.96
+    },
+    {
+      "case_id": "sp2016_08",
+      "pdb_id": "1TW6",
+      "status": "rejected",
+      "model_file": "modeling/cases/1TW6/model.yaml",
+      "prepare_file": "modeling/cases/1TW6/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "REQUIRED_METAL_MODEL_UNAVAILABLE",
+        "RECEPTOR_TERMINUS_MISSING"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1TW6",
+        "url": "https://files.rcsb.org/download/1TW6.cif",
+        "path": "sources/mmcif/1TW6.cif",
+        "sha256": "27386d04da011d691ce0f14821292dd4d1d767bf664cd95d665e24ef61cdaec7",
+        "bytes": 260085,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2023-08-23",
+        "resolution_angstrom": 1.713
+      },
+      "experimental_delta_g_kj_mol": -42.87
+    },
+    {
+      "case_id": "sp2016_09",
+      "pdb_id": "1W9E",
+      "status": "rejected",
+      "model_file": "modeling/cases/1W9E/model.yaml",
+      "prepare_file": "modeling/cases/1W9E/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "RECEPTOR_TERMINUS_MISSING"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1W9E",
+        "url": "https://files.rcsb.org/download/1W9E.cif",
+        "path": "sources/mmcif/1W9E.cif",
+        "sha256": "1ac2fd60a8e84c6ddceafb9091623c22ffcbb67a760153a9337912072fc86b90",
+        "bytes": 619549,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2023-12-13",
+        "resolution_angstrom": 1.56
+      },
+      "experimental_delta_g_kj_mol": -17.38
+    },
+    {
+      "case_id": "sp2016_10",
+      "pdb_id": "1X2R",
+      "status": "eligible",
+      "model_file": "modeling/cases/1X2R/model.yaml",
+      "prepare_file": "modeling/cases/1X2R/prepare.py",
+      "expected_outcome": "eligible_preflight_passed",
+      "reason_codes": [],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "1X2R",
+        "url": "https://files.rcsb.org/download/1X2R.cif",
+        "path": "sources/mmcif/1X2R.cif",
+        "sha256": "bb095937a55bba1589c33cba1286b58a5331acbfcddd855cd3b5f4689e229ab6",
+        "bytes": 333173,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2023-10-25",
+        "resolution_angstrom": 1.7
+      },
+      "experimental_delta_g_kj_mol": -38.42
+    },
+    {
+      "case_id": "sp2016_11",
+      "pdb_id": "2AK5",
+      "status": "eligible",
+      "model_file": "modeling/cases/2AK5/model.yaml",
+      "prepare_file": "modeling/cases/2AK5/prepare.py",
+      "expected_outcome": "eligible_preflight_passed",
+      "reason_codes": [],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "2AK5",
+        "url": "https://files.rcsb.org/download/2AK5.cif",
+        "path": "sources/mmcif/2AK5.cif",
+        "sha256": "6c716634c54ba3bd81f570b1f2384b426db2da9bbf9b44a43f7ef490279090ff",
+        "bytes": 168110,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2023-08-23",
+        "resolution_angstrom": 1.85
+      },
+      "experimental_delta_g_kj_mol": -27.01
+    },
+    {
+      "case_id": "sp2016_12",
+      "pdb_id": "2B9H",
+      "status": "rejected",
+      "model_file": "modeling/cases/2B9H/model.yaml",
+      "prepare_file": "modeling/cases/2B9H/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "RECEPTOR_INTERNAL_GAP",
+        "REQUIRED_NUCLEOTIDE_METAL_MODEL_UNAVAILABLE"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "2B9H",
+        "url": "https://files.rcsb.org/download/2B9H.cif",
+        "path": "sources/mmcif/2B9H.cif",
+        "sha256": "fe6f45d106409196732719d7070195e2c19dd20194ce2d2560e636e34965415d",
+        "bytes": 402533,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2023-08-23",
+        "resolution_angstrom": 1.55
+      },
+      "experimental_delta_g_kj_mol": -40.44
+    },
+    {
+      "case_id": "sp2016_13",
+      "pdb_id": "2CCH",
+      "status": "rejected",
+      "model_file": "modeling/cases/2CCH/model.yaml",
+      "prepare_file": "modeling/cases/2CCH/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "REQUIRED_NUCLEOTIDE_COFACTOR_MODEL_UNAVAILABLE",
+        "RECEPTOR_PTM_MODEL_UNAVAILABLE",
+        "MODIFIED_SUBSTRATE_STATE_UNRESOLVED"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "2CCH",
+        "url": "https://files.rcsb.org/download/2CCH.cif",
+        "path": "sources/mmcif/2CCH.cif",
+        "sha256": "11c52060f14d6896357915a7481f931c4a14d4a0fec02b5d72a1490889a71408",
+        "bytes": 2146071,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2025-10-01",
+        "resolution_angstrom": 1.7
+      },
+      "experimental_delta_g_kj_mol": -43.84
+    },
+    {
+      "case_id": "sp2016_14",
+      "pdb_id": "2FOJ",
+      "status": "rejected",
+      "model_file": "modeling/cases/2FOJ/model.yaml",
+      "prepare_file": "modeling/cases/2FOJ/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "RECEPTOR_INTERNAL_GAP"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "2FOJ",
+        "url": "https://files.rcsb.org/download/2FOJ.cif",
+        "path": "sources/mmcif/2FOJ.cif",
+        "sha256": "977002b290eb35cd40531078b2b75900fe1b6d47928c3bfc2c9440c110485e07",
+        "bytes": 183097,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2023-08-30",
+        "resolution_angstrom": 1.6
+      },
+      "experimental_delta_g_kj_mol": -26.66
+    },
+    {
+      "case_id": "sp2016_15",
+      "pdb_id": "2HO2",
+      "status": "eligible",
+      "model_file": "modeling/cases/2HO2/model.yaml",
+      "prepare_file": "modeling/cases/2HO2/prepare.py",
+      "expected_outcome": "eligible_preflight_passed",
+      "reason_codes": [],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "2HO2",
+        "url": "https://files.rcsb.org/download/2HO2.cif",
+        "path": "sources/mmcif/2HO2.cif",
+        "sha256": "5da0bf7a573c90f02147b056531fc0dcaa3a69d930a738134afce1b03a89c881",
+        "bytes": 121501,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2024-02-14",
+        "resolution_angstrom": 1.33
+      },
+      "experimental_delta_g_kj_mol": -22.28
+    },
+    {
+      "case_id": "sp2016_16",
+      "pdb_id": "2HPL",
+      "status": "eligible",
+      "model_file": "modeling/cases/2HPL/model.yaml",
+      "prepare_file": "modeling/cases/2HPL/prepare.py",
+      "expected_outcome": "eligible_preflight_passed",
+      "reason_codes": [],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "2HPL",
+        "url": "https://files.rcsb.org/download/2HPL.cif",
+        "path": "sources/mmcif/2HPL.cif",
+        "sha256": "771a6653e8dc513cf76a6a7e897f0f23a1ca85a95afc67b74aee52a4725e7e6b",
+        "bytes": 146780,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2024-02-14",
+        "resolution_angstrom": 1.8
+      },
+      "experimental_delta_g_kj_mol": -31.02
+    },
+    {
+      "case_id": "sp2016_17",
+      "pdb_id": "2O9V",
+      "status": "eligible",
+      "model_file": "modeling/cases/2O9V/model.yaml",
+      "prepare_file": "modeling/cases/2O9V/prepare.py",
+      "expected_outcome": "eligible_preflight_passed",
+      "reason_codes": [],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "2O9V",
+        "url": "https://files.rcsb.org/download/2O9V.cif",
+        "path": "sources/mmcif/2O9V.cif",
+        "sha256": "7a6a7904c964f6d31c43a0ab86197e4617ce56f7e8a8b1ca48e4cbc5b66cb7b7",
+        "bytes": 176160,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2023-10-25",
+        "resolution_angstrom": 1.63
+      },
+      "experimental_delta_g_kj_mol": -20.18
+    },
+    {
+      "case_id": "sp2016_18",
+      "pdb_id": "2R7G",
+      "status": "rejected",
+      "model_file": "modeling/cases/2R7G/model.yaml",
+      "prepare_file": "modeling/cases/2R7G/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "RECEPTOR_INTERNAL_GAPS"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "2R7G",
+        "url": "https://files.rcsb.org/download/2R7G.cif",
+        "path": "sources/mmcif/2R7G.cif",
+        "sha256": "5cc9f44e22aa27f8fbfaf55ce31ec9de9bf8ac6a406a0854494f9cb702ff3284",
+        "bytes": 671757,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2024-02-21",
+        "resolution_angstrom": 1.671
+      },
+      "experimental_delta_g_kj_mol": -33.3
+    },
+    {
+      "case_id": "sp2016_19",
+      "pdb_id": "3D1E",
+      "status": "rejected",
+      "model_file": "modeling/cases/3D1E/model.yaml",
+      "prepare_file": "modeling/cases/3D1E/prepare.py",
+      "expected_outcome": "rejected_expected",
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "N_TERMINAL_DYE_STATE_UNRESOLVED"
+      ],
+      "source": {
+        "provider": "RCSB PDB",
+        "format": "mmCIF",
+        "accession": "3D1E",
+        "url": "https://files.rcsb.org/download/3D1E.cif",
+        "path": "sources/mmcif/3D1E.cif",
+        "sha256": "f6f9bd7764debc9f671041efd868a9704117f4b56137a43c37e557016c283f3d",
+        "bytes": 673025,
+        "retrieved_on": "2026-08-07",
+        "revision_date": "2023-08-30",
+        "resolution_angstrom": 1.9
+      },
+      "experimental_delta_g_kj_mol": -33.32
+    }
+  ]
+}

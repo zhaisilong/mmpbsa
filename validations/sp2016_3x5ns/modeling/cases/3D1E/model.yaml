@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_19",
+  "pdb_id": "3D1E",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "3D1E",
+    "url": "https://files.rcsb.org/download/3D1E.cif",
+    "path": "sources/mmcif/3D1E.cif",
+    "sha256": "f6f9bd7764debc9f671041efd868a9704117f4b56137a43c37e557016c283f3d",
+    "bytes": 673025,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2023-08-30",
+    "resolution_angstrom": 1.9
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "DNA polymerase III subunit beta",
+    "peptide_name": "Decamer from polymerase II C-terminal",
+    "experimental_delta_g_kj_mol": -33.32,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -662.1,
+      "dmm_pbsa": -294.3,
+      "vdw": -168.5,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A"
+      ],
+      "label_asym_ids": [
+        "A"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "1-366",
+          "observed_residues": "1-366",
+          "complete": true
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "P"
+      ],
+      "label_asym_ids": [
+        "C"
+      ],
+      "segments": [
+        {
+          "auth_chain": "P",
+          "label_asym_id": "C",
+          "declared_residues": "501-510",
+          "observed_residues": "505-510",
+          "complete": false
+        }
+      ],
+      "declared_sequence": "TLMTGQLGLF",
+      "observed_sequence": "GQLGLF",
+      "complete": false,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [],
+    "altloc_residues": [],
+    "declared_connections": [],
+    "declared_unobserved_chemistry": [
+      "The synthesized peptide N terminus is Rhodamine 6G-labelled, but the dye and peptide residues TLMT501-504 are not visible in the deposited coordinates."
+    ]
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A polymer as benchmark receptor",
+      "auth P only after missing peptide residues are resolved"
+    ],
+    "explicit_exclude": [
+      "auth B receptor copy under the published chain-selection contract",
+      "all crystallographic water"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "rejected",
+    "reason_codes": [
+      "PEPTIDE_RESIDUES_MISSING",
+      "N_TERMINAL_DYE_STATE_UNRESOLVED"
+    ],
+    "reasons": [
+      "The first four residues THR501-THR504 of the declared decamer are absent.",
+      "The experimental ligand carries an N-terminal Rhodamine 6G label whose atoms and attachment geometry are not resolved in the structure."
+    ],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "Observed residues are ff14SB-compatible, but the deposited 6-mer is not the declared dye-labelled benchmark decamer and the Rhodamine attachment requires a case-local chemical model."
+  },
+  "build": {
+    "status": "blocked",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Resolve and document the missing peptide N terminus.",
+      "Define, parameterize, and validate the N-terminal Rhodamine 6G attachment."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

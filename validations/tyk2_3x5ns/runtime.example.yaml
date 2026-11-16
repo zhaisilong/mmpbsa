@@ -1,0 +1,86 @@
+schema_version: mmpbsa.runtime.v1
+
+providers:
+  admission: backends
+  md: backends
+  trajectory: backends
+  trajectory_qc: backends
+  scoring: backends
+  report.assets: backends
+  report: report
+
+scheduler:
+  gpu_ids: ["0"]
+  max_workers: 2
+  threads_per_job: 4
+  cpu_slots: 8
+
+backends:
+  backends:
+    common:
+      probe_cwd: .
+    admission:
+      major_policy:
+        accepted: [4]
+    md:
+      tool:
+        executable: gmx
+        version_arguments: [--version]
+        major_policy:
+          accepted: [2024, 2025, 2026]
+      append_on_resume: true
+      maxwarn: 0
+      grompp_arguments: []
+      mdrun_arguments: []
+    trajectory:
+      gromacs:
+        executable: gmx
+        version_arguments: [--version]
+        major_policy:
+          accepted: [2024, 2025, 2026]
+      cpptraj:
+        executable: cpptraj
+        version_arguments: [-V]
+        major_policy:
+          accepted: [6]
+    trajectory_qc:
+      tool:
+        executable: cpptraj
+        version_arguments: [-V]
+        major_policy:
+          accepted: [6]
+    scoring:
+      tool:
+        executable: MMPBSA.py.MPI
+        version_arguments: [--version]
+        major_policy:
+          accepted: [14]
+      sander:
+        executable: sander
+        version_arguments: [--version]
+        major_policy:
+          accepted: [24]
+      ranks: 4
+      mpi_launcher: [mpirun]
+      extra_arguments: []
+    report.assets:
+      cpptraj:
+        executable: cpptraj
+        version_arguments: [-V]
+        major_policy:
+          accepted: [6]
+    preparation:
+      antechamber:
+        executable: antechamber
+        version_arguments: [-h]
+      parmchk2:
+        executable: parmchk2
+        version_arguments: [-l]
+      tleap:
+        executable: tleap
+        version_arguments: [-h]
+  report: {}
+
+environment:
+  AMBERHOME: /opt/amber24
+  GMX_MAXBACKUP: "-1"

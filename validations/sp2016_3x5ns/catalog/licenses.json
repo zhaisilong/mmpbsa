@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "datasets": [
+    {
+      "scope": "sources/mmcif/*.cif",
+      "name": "Worldwide Protein Data Bank coordinate records",
+      "spdx_id": "CC0-1.0",
+      "url": "https://www.wwpdb.org/about/usage"
+    },
+    {
+      "scope": "benchmark labels and citation metadata",
+      "name": "Spiliotopoulos et al. 2016 article",
+      "spdx_id": "CC-BY-4.0",
+      "url": "https://doi.org/10.3389/fmolb.2016.00046",
+      "attribution": "Spiliotopoulos A, et al., Front Mol Biosci. 2016;3:46."
+    }
+  ],
+  "exclusions": "No v1 trajectories, topology files, logs, or source code are redistributed here."
+}

@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_13",
+  "pdb_id": "2CCH",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "2CCH",
+    "url": "https://files.rcsb.org/download/2CCH.cif",
+    "path": "sources/mmcif/2CCH.cif",
+    "sha256": "11c52060f14d6896357915a7481f931c4a14d4a0fec02b5d72a1490889a71408",
+    "bytes": 2146071,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2025-10-01",
+    "resolution_angstrom": 1.7
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Cell division protein kinase 2/cyclin A2",
+    "peptide_name": "Cell division control protein 6 homolog peptide",
+    "experimental_delta_g_kj_mol": -43.84,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -1046.7,
+      "dmm_pbsa": -410.2,
+      "vdw": -201.9,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A",
+        "B"
+      ],
+      "label_asym_ids": [
+        "A",
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "0-298",
+          "observed_residues": "0-296",
+          "complete": false
+        },
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "173-432",
+          "observed_residues": "173-432",
+          "complete": true
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "E"
+      ],
+      "label_asym_ids": [
+        "E"
+      ],
+      "segments": [
+        {
+          "auth_chain": "E",
+          "label_asym_id": "E",
+          "declared_residues": "1-12",
+          "observed_residues": "1-12",
+          "complete": true
+        }
+      ],
+      "declared_sequence": "HTLKGRRLVFDN",
+      "observed_sequence": "HTLKGRRLVFDN",
+      "complete": true,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [
+      "include receptor PTM TPO auth A160 / label A161 pending parameter audit",
+      "include ATP A1297 pending chemistry audit",
+      "exclude SO4 A1298",
+      "exclude GOL A1299/A1300"
+    ],
+    "altloc_residues": [
+      "multiple A/B receptor residues",
+      "ATP A1297 alternate conformers"
+    ],
+    "declared_connections": [
+      "no explicit peptide-to-ATP covalent struct_conn in current mmCIF"
+    ]
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A and B polymers, including TPO auth A160 / label A161, plus ATP A1297 pending chemistry audit",
+      "auth E polymer as peptide ligand pending chemistry audit"
+    ],
+    "explicit_exclude": [
+      "SO4 A1298",
+      "GOL A1299/A1300",
+      "other crystal copy C/D/F",
+      "ordinary crystallographic water"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "rejected",
+    "reason_codes": [
+      "REQUIRED_NUCLEOTIDE_COFACTOR_MODEL_UNAVAILABLE",
+      "RECEPTOR_PTM_MODEL_UNAVAILABLE",
+      "MODIFIED_SUBSTRATE_STATE_UNRESOLVED"
+    ],
+    "reasons": [
+      "ATP A1297 occupies the kinase site and requires validated parameters and altloc treatment.",
+      "The selected receptor contains phosphothreonine TPO auth A160 / label A161 and requires an explicit protonation and force-field model.",
+      "The entry describes a gamma-linked ATP substrate analogue, while current struct_conn has no peptide-ATP covalent link."
+    ],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "The selected receptor TPO and ATP analogue need explicit, validated parameter and protonation models beyond the plain ff14SB protein assignment."
+  },
+  "build": {
+    "status": "blocked",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Resolve ATP-analogue chemical state.",
+      "Parameterize the nucleotide and alternate conformers.",
+      "Parameterize and audit receptor TPO auth A160 / label A161."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

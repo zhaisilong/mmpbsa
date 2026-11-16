@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_10",
+  "pdb_id": "1X2R",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "1X2R",
+    "url": "https://files.rcsb.org/download/1X2R.cif",
+    "path": "sources/mmcif/1X2R.cif",
+    "sha256": "bb095937a55bba1589c33cba1286b58a5331acbfcddd855cd3b5f4689e229ab6",
+    "bytes": 333173,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2023-10-25",
+    "resolution_angstrom": 1.7
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Kelch-like ECH-associated protein 1",
+    "peptide_name": "Nuclear factor erythroid 2 related factor 2 peptide",
+    "experimental_delta_g_kj_mol": -38.42,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -1309.4,
+      "dmm_pbsa": -453.8,
+      "vdw": -179.7,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A"
+      ],
+      "label_asym_ids": [
+        "A"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "309-624",
+          "observed_residues": "324-613",
+          "complete": false
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "B"
+      ],
+      "label_asym_ids": [
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "76-84",
+          "observed_residues": "76-84",
+          "complete": true
+        }
+      ],
+      "declared_sequence": "LDEETGEFL",
+      "observed_sequence": "LDEETGEFL",
+      "complete": true,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [
+      "exclude nine SO4 ions A701-A709"
+    ],
+    "altloc_residues": [],
+    "declared_connections": []
+  },
+  "structure_decisions": {
+    "include": [
+      "observed auth A polymer as receptor",
+      "auth B polymer as peptide ligand"
+    ],
+    "explicit_exclude": [
+      "SO4 A701-A709 as crystallization ions",
+      "all crystallographic water"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "eligible",
+    "reason_codes": [],
+    "reasons": [],
+    "scientific_risk": "medium"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "ff14SB-compatible after explicit sulfate exclusion; absent receptor tails are not silently rebuilt."
+  },
+  "build": {
+    "status": "not_implemented",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Use observed receptor termini.",
+      "Confirm excluded sulfates do not bridge the interface."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "schema_version": "sp2016.2hpl_build_plan.v1",
+  "case_id": "sp2016_16",
+  "pdb_id": "2HPL",
+  "source": {
+    "path": "sources/mmcif/2HPL.cif",
+    "format": "mmCIF",
+    "sha256": "771a6653e8dc513cf76a6a7e897f0f23a1ca85a95afc67b74aee52a4725e7e6b",
+    "model_number": 1,
+    "biological_assembly": {
+      "assembly_id": "1",
+      "author_defined": true,
+      "operator_id": "1",
+      "operator": "identity",
+      "label_asym_ids": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "selection": "Use assembly 1 under its identity operator; retain polymer label asym A/B and exclude water-only label asym C/D."
+    }
+  },
+  "entities": {
+    "receptor": {
+      "auth_chain": "A",
+      "label_asym_id": "A",
+      "residues": "12-111",
+      "residue_count": 100,
+      "termini": {
+        "n_terminal": "standard_charged",
+        "c_terminal": "standard_charged",
+        "expected_amber_templates": {
+          "n_terminal": "NSER",
+          "c_terminal": "CSER"
+        }
+      }
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chain": "B",
+      "label_asym_id": "B",
+      "residues": "802-806",
+      "sequence": "DDLYG",
+      "residue_count": 5,
+      "termini": {
+        "n_terminal": "standard_charged",
+        "c_terminal": "standard_charged",
+        "expected_amber_templates": {
+          "n_terminal": "NASP",
+          "c_terminal": "CGLY"
+        }
+      },
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_filter": {
+    "include": [
+      "polymer residues in auth chain A",
+      "polymer residues in auth chain B"
+    ],
+    "exclude": [
+      "all crystallographic water",
+      "all non-polymer records"
+    ],
+    "altloc_policy": "fail unless every selected atom has blank altloc and occupancy 1.0"
+  },
+  "protonation": {
+    "histidines": {
+      "A:86": "HIE"
+    },
+    "basis": "validation-local explicit Amber residue assignment; no other titratable residue is renamed"
+  },
+  "terminal_policy": {
+    "decision": "Treat both complete deposited polymer entities as chemically free, charged N and C termini.",
+    "ownership": "This is an explicit SP2016 validation default, not an implicit tleap decision.",
+    "admission_evidence": "Require exact LEaP NSER/CSER and NASP/CGLY mappings plus topology H1/H2/H3 and OXT atoms before sealing."
+  },
+  "force_field": {
+    "protein_and_peptide": "ff14SB",
+    "water": "TIP3P",
+    "ion_parameters": "Joung-Cheatham monovalent ions loaded by leaprc.water.tip3p",
+    "pb_radii": "mbondi2"
+  },
+  "solvation": {
+    "shape": "truncated_octahedron",
+    "tleap_command": "solvateOct",
+    "buffer_angstrom": 10.0,
+    "salt_target_molar": 0.15,
+    "salt_pair_formula": "round(preion_water_count * salt_target_molar / 55.5)",
+    "neutralization": "add the minimum counterions before adding equal Na+/Cl- salt pairs"
+  },
+  "interface": {
+    "receptor_residue_heavy_atom_cutoff_angstrom": 5.0,
+    "selection": "backbone atoms N,CA,C,O of receptor residues within cutoff of any peptide heavy atom"
+  },
+  "outputs": {
+    "dry_amber": [
+      "complex.prmtop",
+      "complex.inpcrd",
+      "receptor.prmtop",
+      "receptor.inpcrd",
+      "ligand.prmtop",
+      "ligand.inpcrd"
+    ],
+    "solvated_gromacs": [
+      "topol.top",
+      "system.gro",
+      "index.ndx"
+    ],
+    "draft_schema": "mmpbsa.prepared_case_draft.v1",
+    "sealed_schema": "mmpbsa.prepared_case.v2",
+    "target_must_not_exist": true,
+    "transactional_publish": true,
+    "starts_md": false
+  }
+}

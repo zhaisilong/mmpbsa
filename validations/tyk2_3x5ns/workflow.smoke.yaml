@@ -1,0 +1,43 @@
+schema_version: mmpbsa.workflow.v3
+project_id: tyk2_20ps_smoke
+
+protocol:
+  # Non-production integration check: shortened EM/NVT/NPT plus 20 ps MD.
+  preset: smoke_20ps@1
+  models: [gb, pb]
+  completion_policy: all
+
+cases:
+  - case_id: lig_ejm_31
+    label: TYK2 / EJM 31 (20 ps smoke)
+    prepared_case: prepared/lig_ejm_31/prepared_case.json
+    reference:
+      experimental_dg_kj_mol: -40.05726248802519
+      experimental_uncertainty_kj_mol: 0.7488516026923882
+      observable_type: Ki
+      observable_value_uM: 0.096
+    metadata:
+      target: TYK2
+      pdb_id: 4GIH
+      ligand_record_id: lig_ejm_31
+      purpose: non-production integration smoke
+
+replicas:
+  - {replica_id: rep01, replica_index: 1, seed: 2026052402}
+  - {replica_id: rep02, replica_index: 2, seed: 2026052403}
+  - {replica_id: rep03, replica_index: 3, seed: 2026052404}
+
+analysis:
+  reference_key: experimental_dg_kj_mol
+  aggregation: replica_mean
+
+report:
+  title: TYK2 EJM 31 — non-production 20 ps smoke
+  metadata:
+    Purpose: integration only; not scientifically interpretable
+    Target: TYK2
+    Structure: 4GIH chain A
+  provenance:
+    Dataset: openforcefield/protein-ligand-benchmark
+    Dataset DOI: 10.5281/zenodo.4813735
+

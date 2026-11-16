@@ -1,0 +1,127 @@
+{
+  "schema_version": "mmpbsa.validation.affinity_measurements.v1",
+  "gas_constant_kj_mol_k": 0.00831446261815324,
+  "temperature_assumption": {
+    "temperature_k": 298.15,
+    "source": "validation_assumption",
+    "note": "The upstream TYK2 measurement records do not state assay temperature."
+  },
+  "standard_state_molar": 1.0,
+  "records": {
+    "tyk2_lig_ejm_31": {
+      "ligand_record_id": "lig_ejm_31",
+      "observable_type": "Ki",
+      "value": 0.096,
+      "error": 0.029,
+      "unit": "uM",
+      "error_kind": "reported_unspecified",
+      "doi": "10.1016/j.ejmech.2013.03.070",
+      "comment": "Table 4, entry 31",
+      "eligible_for_thermodynamic_correlation": true,
+      "derived_standard_free_energy": {
+        "value_kj_mol": -40.05726248802519,
+        "from_k_minus_error_kj_mol": -40.948833196660814,
+        "from_k_plus_error_kj_mol": -39.40290324260601,
+        "linearized_uncertainty_kj_mol": 0.7488516026923882,
+        "temperature_k": 298.15,
+        "temperature_source": "validation_assumption",
+        "standard_state_molar": 1.0,
+        "source_observable": "Ki",
+        "transform": "delta_g_standard = R * T * ln(Ki_molar / 1 molar)"
+      }
+    },
+    "tyk2_lig_ejm_43": {
+      "ligand_record_id": "lig_ejm_43",
+      "observable_type": "Ki",
+      "value": 0.84,
+      "error": 0.25,
+      "unit": "uM",
+      "error_kind": "reported_unspecified",
+      "doi": "10.1016/j.ejmech.2013.03.070",
+      "comment": "Table 4, entry 43",
+      "eligible_for_thermodynamic_correlation": true,
+      "derived_standard_free_energy": {
+        "value_kj_mol": -34.68027156990909,
+        "from_k_minus_error_kj_mol": -35.556035910245036,
+        "from_k_plus_error_kj_mol": -34.034426209319854,
+        "linearized_uncertainty_kj_mol": 0.7377848302388061,
+        "temperature_k": 298.15,
+        "temperature_source": "validation_assumption",
+        "standard_state_molar": 1.0,
+        "source_observable": "Ki",
+        "transform": "delta_g_standard = R * T * ln(Ki_molar / 1 molar)"
+      }
+    },
+    "tyk2_lig_ejm_46": {
+      "ligand_record_id": "lig_ejm_46",
+      "observable_type": "Ki",
+      "value": 0.0048,
+      "error": 0.0014,
+      "unit": "uM",
+      "error_kind": "reported_unspecified",
+      "doi": "10.1016/j.ejmech.2013.03.070",
+      "comment": "Table 4, entry 46",
+      "eligible_for_thermodynamic_correlation": true,
+      "derived_standard_free_energy": {
+        "value_kj_mol": -47.48355406635859,
+        "from_k_minus_error_kj_mol": -48.33839881394299,
+        "from_k_plus_error_kj_mol": -46.84910622943133,
+        "linearized_uncertainty_kj_mol": 0.72302913363403,
+        "temperature_k": 298.15,
+        "temperature_source": "validation_assumption",
+        "standard_state_molar": 1.0,
+        "source_observable": "Ki",
+        "transform": "delta_g_standard = R * T * ln(Ki_molar / 1 molar)"
+      }
+    },
+    "tyk2_lig_ejm_50": {
+      "ligand_record_id": "lig_ejm_50",
+      "observable_type": "Ki",
+      "value": 0.25,
+      "error": 0.075,
+      "unit": "uM",
+      "error_kind": "reported_unspecified",
+      "doi": "10.1016/j.ejmech.2013.03.070",
+      "comment": "Table 4, entry 50",
+      "eligible_for_thermodynamic_correlation": true,
+      "derived_standard_free_energy": {
+        "value_kj_mol": -37.68462116680786,
+        "from_k_minus_error_kj_mol": -38.56880302636782,
+        "from_k_plus_error_kj_mol": -37.03423142908971,
+        "linearized_uncertainty_kj_mol": 0.7436871088807165,
+        "temperature_k": 298.15,
+        "temperature_source": "validation_assumption",
+        "standard_state_molar": 1.0,
+        "source_observable": "Ki",
+        "transform": "delta_g_standard = R * T * ln(Ki_molar / 1 molar)"
+      }
+    },
+    "tyk2_lig_ejm_54": {
+      "ligand_record_id": "lig_ejm_54",
+      "observable_type": "Ki",
+      "value": 0.018,
+      "error": 0.0054,
+      "unit": "uM",
+      "error_kind": "reported_unspecified",
+      "doi": "10.1016/j.ejmech.2013.03.070",
+      "comment": "Table 4, entry 54",
+      "eligible_for_thermodynamic_correlation": true,
+      "derived_standard_free_energy": {
+        "value_kj_mol": -44.20697813541641,
+        "from_k_minus_error_kj_mol": -45.09115999497638,
+        "from_k_plus_error_kj_mol": -43.55658839769827,
+        "linearized_uncertainty_kj_mol": 0.7436871088807167,
+        "temperature_k": 298.15,
+        "temperature_source": "validation_assumption",
+        "standard_state_molar": 1.0,
+        "source_observable": "Ki",
+        "transform": "delta_g_standard = R * T * ln(Ki_molar / 1 molar)"
+      }
+    }
+  },
+  "endpoint_policy": {
+    "Kd": "Convert with delta_g_standard = R*T*ln(Kd_molar/1 molar).",
+    "Ki": "Convert with the same standard-state expression but retain source_observable=Ki.",
+    "IC50": "Do not convert directly. Derive Ki only when assay substrate concentration, Km, and a justified inhibition model are recorded; otherwise leave derived free energy null and exclude it from thermodynamic correlation."
+  }
+}

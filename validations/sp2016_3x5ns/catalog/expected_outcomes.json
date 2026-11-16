@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "policy": {
+    "eligible": "Expected source/hash/entity/scientific-decision checks pass; build status is explicit per case. Only 2HPL has an implemented validation-local builder and sealing workflow; no result is included.",
+    "rejected": "Source/hash/entity checks pass and the case is rejected for catalogued scientific reasons.",
+    "numeric": "Literature scores are contextual labels, not expected values for a new 3x5 ns ff14SB MMPBSA protocol.",
+    "no_production_claim": true
+  },
+  "cases": {
+    "sp2016_01": {
+      "pdb_id": "1CKA",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "PEPTIDE_TERMINAL_ATOM_MISSING"
+      ]
+    },
+    "sp2016_02": {
+      "pdb_id": "1D4T",
+      "eligibility": "eligible",
+      "preflight_status": "eligible_preflight_passed",
+      "build_status": "not_implemented",
+      "production_topology_present": false,
+      "reason_codes": []
+    },
+    "sp2016_03": {
+      "pdb_id": "1MFG",
+      "eligibility": "eligible",
+      "preflight_status": "eligible_preflight_passed",
+      "build_status": "not_implemented",
+      "production_topology_present": false,
+      "reason_codes": []
+    },
+    "sp2016_04": {
+      "pdb_id": "1PZ5",
+      "eligibility": "eligible",
+      "preflight_status": "eligible_preflight_passed",
+      "build_status": "not_implemented",
+      "production_topology_present": false,
+      "reason_codes": []
+    },
+    "sp2016_05": {
+      "pdb_id": "1SE0",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "RECEPTOR_TERMINI_MISSING",
+        "REQUIRED_METAL_MODEL_UNAVAILABLE"
+      ]
+    },
+    "sp2016_06": {
+      "pdb_id": "1T4F",
+      "eligibility": "eligible",
+      "preflight_status": "eligible_preflight_passed",
+      "build_status": "not_implemented",
+      "production_topology_present": false,
+      "reason_codes": []
+    },
+    "sp2016_07": {
+      "pdb_id": "1T7R",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "REQUIRED_ORGANIC_COFACTOR_MODEL_UNAVAILABLE"
+      ]
+    },
+    "sp2016_08": {
+      "pdb_id": "1TW6",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "REQUIRED_METAL_MODEL_UNAVAILABLE",
+        "RECEPTOR_TERMINUS_MISSING"
+      ]
+    },
+    "sp2016_09": {
+      "pdb_id": "1W9E",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "RECEPTOR_TERMINUS_MISSING"
+      ]
+    },
+    "sp2016_10": {
+      "pdb_id": "1X2R",
+      "eligibility": "eligible",
+      "preflight_status": "eligible_preflight_passed",
+      "build_status": "not_implemented",
+      "production_topology_present": false,
+      "reason_codes": []
+    },
+    "sp2016_11": {
+      "pdb_id": "2AK5",
+      "eligibility": "eligible",
+      "preflight_status": "eligible_preflight_passed",
+      "build_status": "not_implemented",
+      "production_topology_present": false,
+      "reason_codes": []
+    },
+    "sp2016_12": {
+      "pdb_id": "2B9H",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "RECEPTOR_INTERNAL_GAP",
+        "REQUIRED_NUCLEOTIDE_METAL_MODEL_UNAVAILABLE"
+      ]
+    },
+    "sp2016_13": {
+      "pdb_id": "2CCH",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "REQUIRED_NUCLEOTIDE_COFACTOR_MODEL_UNAVAILABLE",
+        "RECEPTOR_PTM_MODEL_UNAVAILABLE",
+        "MODIFIED_SUBSTRATE_STATE_UNRESOLVED"
+      ]
+    },
+    "sp2016_14": {
+      "pdb_id": "2FOJ",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "RECEPTOR_INTERNAL_GAP"
+      ]
+    },
+    "sp2016_15": {
+      "pdb_id": "2HO2",
+      "eligibility": "eligible",
+      "preflight_status": "eligible_preflight_passed",
+      "build_status": "not_implemented",
+      "production_topology_present": false,
+      "reason_codes": []
+    },
+    "sp2016_16": {
+      "pdb_id": "2HPL",
+      "eligibility": "eligible",
+      "preflight_status": "eligible_preflight_passed",
+      "build_status": "validation_local_proof_implemented",
+      "production_topology_present": false,
+      "reason_codes": []
+    },
+    "sp2016_17": {
+      "pdb_id": "2O9V",
+      "eligibility": "eligible",
+      "preflight_status": "eligible_preflight_passed",
+      "build_status": "not_implemented",
+      "production_topology_present": false,
+      "reason_codes": []
+    },
+    "sp2016_18": {
+      "pdb_id": "2R7G",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "RECEPTOR_INTERNAL_GAPS"
+      ]
+    },
+    "sp2016_19": {
+      "pdb_id": "3D1E",
+      "eligibility": "rejected",
+      "preflight_status": "rejected_expected",
+      "build_status": "blocked",
+      "production_topology_present": false,
+      "reason_codes": [
+        "PEPTIDE_RESIDUES_MISSING",
+        "N_TERMINAL_DYE_STATE_UNRESOLVED"
+      ]
+    }
+  }
+}

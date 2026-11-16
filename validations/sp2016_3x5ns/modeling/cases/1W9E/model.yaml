@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_09",
+  "pdb_id": "1W9E",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "1W9E",
+    "url": "https://files.rcsb.org/download/1W9E.cif",
+    "path": "sources/mmcif/1W9E.cif",
+    "sha256": "1ac2fd60a8e84c6ddceafb9091623c22ffcbb67a760153a9337912072fc86b90",
+    "bytes": 619549,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2023-12-13",
+    "resolution_angstrom": 1.56
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Syntenin 1",
+    "peptide_name": "TNEFYF peptide",
+    "experimental_delta_g_kj_mol": -17.38,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -574.4,
+      "dmm_pbsa": -253.3,
+      "vdw": -142.2,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "B"
+      ],
+      "label_asym_ids": [
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "108-273",
+          "observed_residues": "110-273",
+          "complete": false
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "S"
+      ],
+      "label_asym_ids": [
+        "D"
+      ],
+      "segments": [
+        {
+          "auth_chain": "S",
+          "label_asym_id": "D",
+          "declared_residues": "1-6",
+          "observed_residues": "2-6",
+          "complete": false
+        }
+      ],
+      "declared_sequence": "TNEFYF",
+      "observed_sequence": "NEFYF",
+      "complete": false,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [
+      "exclude BEZ on unselected auth A"
+    ],
+    "altloc_residues": [],
+    "declared_connections": []
+  },
+  "structure_decisions": {
+    "include": [
+      "auth B polymer as receptor",
+      "auth S only after missing THR1 is resolved"
+    ],
+    "explicit_exclude": [
+      "other crystal copies A, R, T",
+      "BEZ A1274",
+      "all crystallographic water"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "rejected",
+    "reason_codes": [
+      "PEPTIDE_RESIDUES_MISSING",
+      "RECEPTOR_TERMINUS_MISSING"
+    ],
+    "reasons": [
+      "N-terminal THR1 of declared TNEFYF is absent.",
+      "Receptor B residues 108-109 are absent."
+    ],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "Observed standard residues are ff14SB-compatible, but adding missing peptide THR1 is a scientific modeling decision."
+  },
+  "build": {
+    "status": "blocked",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Do not reinterpret observed NEFYF as benchmark TNEFYF."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

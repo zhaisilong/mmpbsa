@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_07",
+  "pdb_id": "1T7R",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "1T7R",
+    "url": "https://files.rcsb.org/download/1T7R.cif",
+    "path": "sources/mmcif/1T7R.cif",
+    "sha256": "3381237ff04e0a7f3f32302daee791469263b9d4e4465a483af015049096dbac",
+    "bytes": 282974,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2024-02-14",
+    "resolution_angstrom": 1.4
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Androgen receptor",
+    "peptide_name": "FxxLF motif peptide",
+    "experimental_delta_g_kj_mol": -33.96,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -1207.5,
+      "dmm_pbsa": -330.1,
+      "vdw": -76.6,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A"
+      ],
+      "label_asym_ids": [
+        "A"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "651-919",
+          "observed_residues": "669-918",
+          "complete": false
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "B"
+      ],
+      "label_asym_ids": [
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "98-112",
+          "observed_residues": "98-107",
+          "complete": false
+        }
+      ],
+      "declared_sequence": "SSRFESLFAGEKESR",
+      "observed_sequence": "SSRFESLFAG",
+      "complete": false,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [
+      "include DHT auth A300 / label C as receptor co-ligand"
+    ],
+    "altloc_residues": [
+      "A:GLN711",
+      "A:SER740",
+      "A:MET761",
+      "A:MET780",
+      "A:CYS806",
+      "A:MET807",
+      "A:LEU810",
+      "A:ILE815",
+      "A:ILE841"
+    ],
+    "declared_connections": []
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A polymer plus DHT A300 / label C as receptor",
+      "auth B only after missing ligand residues are resolved"
+    ],
+    "explicit_exclude": [
+      "all crystallographic water",
+      "discarded receptor alternate conformers"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "rejected",
+    "reason_codes": [
+      "PEPTIDE_RESIDUES_MISSING",
+      "REQUIRED_ORGANIC_COFACTOR_MODEL_UNAVAILABLE"
+    ],
+    "reasons": [
+      "Declared peptide residues GLU108-ARG112 are absent.",
+      "DHT A300 is a functional receptor co-ligand and lacks validated case-local parameters."
+    ],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "ff14SB does not cover DHT; validated small-molecule parameters and charge are required in the receptor topology."
+  },
+  "build": {
+    "status": "blocked",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Resolve missing peptide tail.",
+      "Parameterize DHT and retain it in complex and receptor topologies."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

@@ -1,0 +1,15 @@
+name: mmpbsa-v2
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - ambertools=24.8
+  - parmed=4.3.1
+  - gemmi=0.7.5
+  - pyyaml=6.0
+  - openbabel=3.1.1
+  - openmm=8.5.1
+  - mdtraj=1.11
+  - pip
+  - pip:
+      - -e .[preparation,test]

@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_05",
+  "pdb_id": "1SE0",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "1SE0",
+    "url": "https://files.rcsb.org/download/1SE0.cif",
+    "path": "sources/mmcif/1SE0.cif",
+    "sha256": "92ff7ba36275bc3c1ec7f4d0cb4cb3f70316fcf55ed406cbb272a24b36aae30e",
+    "bytes": 159010,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2024-02-14",
+    "resolution_angstrom": 1.75
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Apoptosis 1 inhibitor",
+    "peptide_name": "Cell death protein Grim peptide",
+    "experimental_delta_g_kj_mol": -39.89,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -890.8,
+      "dmm_pbsa": -378.4,
+      "vdw": -213.6,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A"
+      ],
+      "label_asym_ids": [
+        "A"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "30-145",
+          "observed_residues": "39-135",
+          "complete": false
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "B"
+      ],
+      "label_asym_ids": [
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "1-10",
+          "observed_residues": "1-7",
+          "complete": false
+        }
+      ],
+      "declared_sequence": "AIAYFIPDQA",
+      "observed_sequence": "AIAYFIP",
+      "complete": false,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [
+      "include ZN auth A201 / label C (occupancy 1.0)"
+    ],
+    "altloc_residues": [],
+    "declared_connections": [
+      "A:CYS80-SG to ZN201",
+      "A:CYS83-SG to ZN201",
+      "A:HIS100-NE2 to ZN201",
+      "A:CYS107-SG to ZN201"
+    ]
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A polymer plus ZN A201 / label C as receptor",
+      "auth B only after missing ligand residues are resolved"
+    ],
+    "explicit_exclude": [
+      "ordinary crystallographic water; metal-site water requires a separate audit"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "rejected",
+    "reason_codes": [
+      "PEPTIDE_RESIDUES_MISSING",
+      "RECEPTOR_TERMINI_MISSING",
+      "REQUIRED_METAL_MODEL_UNAVAILABLE"
+    ],
+    "reasons": [
+      "Declared ASP8, GLN9, and ALA10 are absent.",
+      "Receptor residues 30-38 and 136-145 are absent.",
+      "Structural Zn A201 must not be stripped, but no validated case-local metal model exists."
+    ],
+    "scientific_risk": "high"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "ff14SB alone cannot represent the tetrahedral structural Zn site; a validated MCPB.py or documented alternative is required."
+  },
+  "build": {
+    "status": "blocked",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Resolve missing peptide residues.",
+      "Create and validate a Zn coordination model."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

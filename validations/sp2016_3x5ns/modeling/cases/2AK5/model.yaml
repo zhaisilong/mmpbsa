@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "validation_id": "sp2016_3x5ns",
+  "case_id": "sp2016_11",
+  "pdb_id": "2AK5",
+  "source": {
+    "provider": "RCSB PDB",
+    "format": "mmCIF",
+    "accession": "2AK5",
+    "url": "https://files.rcsb.org/download/2AK5.cif",
+    "path": "sources/mmcif/2AK5.cif",
+    "sha256": "6c716634c54ba3bd81f570b1f2384b426db2da9bbf9b44a43f7ef490279090ff",
+    "bytes": 168110,
+    "retrieved_on": "2026-08-07",
+    "revision_date": "2023-08-23",
+    "resolution_angstrom": 1.85,
+    "biological_assembly": {
+      "assembly_id": "1",
+      "author_defined": true,
+      "operator_id": "1",
+      "operator": "identity",
+      "label_asym_ids": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "oligomeric_details": "hexameric; source generator uses operators 1 and 2",
+      "case_component_selection": {
+        "receptor_label_asym_ids": [
+          "A",
+          "B"
+        ],
+        "ligand_label_asym_ids": [
+          "C"
+        ],
+        "rationale": "Use one complete symmetry-independent receptor-receptor-peptide binding unit under operator 1; operator 2 supplies the symmetry-related second unit and must not be mixed into this single-complex benchmark case."
+      }
+    }
+  },
+  "benchmark": {
+    "source_id": "spiliotopoulos2016",
+    "receptor_name": "Rho guanine nucleotide exchange factor 7",
+    "peptide_name": "8-residue peptide from CBL-B",
+    "experimental_delta_g_kj_mol": -27.01,
+    "historical_paper_scores_kj_mol": {
+      "mm_pbsa": -509.7,
+      "dmm_pbsa": -225.3,
+      "vdw": -123.5,
+      "use": "literature context only; not a per-case MD acceptance target"
+    }
+  },
+  "entities": {
+    "receptor": {
+      "kind": "protein",
+      "auth_chains": [
+        "A",
+        "B"
+      ],
+      "label_asym_ids": [
+        "A",
+        "B"
+      ],
+      "segments": [
+        {
+          "auth_chain": "A",
+          "label_asym_id": "A",
+          "declared_residues": "3-66",
+          "observed_residues": "6-65",
+          "complete": false
+        },
+        {
+          "auth_chain": "B",
+          "label_asym_id": "B",
+          "declared_residues": "3-66",
+          "observed_residues": "3-66",
+          "complete": true
+        }
+      ]
+    },
+    "ligand": {
+      "kind": "peptide",
+      "auth_chains": [
+        "D"
+      ],
+      "label_asym_ids": [
+        "C"
+      ],
+      "segments": [
+        {
+          "auth_chain": "D",
+          "label_asym_id": "C",
+          "declared_residues": "904-911",
+          "observed_residues": "904-911",
+          "complete": true
+        }
+      ],
+      "declared_sequence": "RPPKPRPR",
+      "observed_sequence": "RPPKPRPR",
+      "complete": true,
+      "qc_rmsd_selection": "backbone"
+    }
+  },
+  "source_audit": {
+    "non_water_heterogens": [],
+    "altloc_residues": [],
+    "declared_connections": []
+  },
+  "structure_decisions": {
+    "include": [
+      "auth A and B polymers together as benchmark receptor",
+      "auth D / label C polymer as peptide ligand"
+    ],
+    "explicit_exclude": [
+      "all crystallographic water"
+    ],
+    "altloc_policy": "highest occupancy; exact ties use altloc A; record occupancies and discarded conformers"
+  },
+  "eligibility": {
+    "status": "eligible",
+    "reason_codes": [],
+    "reasons": [],
+    "scientific_risk": "medium"
+  },
+  "force_field": {
+    "protein": "ff14SB",
+    "assessment": "ff14SB-compatible; preserve both receptor chains and the explicit A-chain terminal omissions."
+  },
+  "build": {
+    "status": "not_implemented",
+    "production_topology_present": false,
+    "required_case_work": [
+      "Preserve both receptor chains A and B.",
+      "Use observed A6-65 without silent terminal rebuilding.",
+      "Materialize and audit assembly 1 operation 1 as label A+B receptor plus label C peptide; do not mix atoms from operation 2."
+    ],
+    "boundary": "Source/model preflight only; this entry does not produce or claim a production topology."
+  }
+}

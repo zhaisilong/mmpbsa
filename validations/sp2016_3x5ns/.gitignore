@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+preflight*.json
+prepared/
+work/
+modeling/cases/2HPL/_integration_build/
+modeling/cases/2HPL/._integration_build.failed.*/
+modeling/cases/2HPL/.build-proof-*/
